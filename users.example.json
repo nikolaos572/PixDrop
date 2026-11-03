@@ -1,0 +1,6 @@
+{
+  "users": {
+    "alice": "<replace with the output of: openssl rand -hex 32>",
+    "bob": "<replace with another random token>"
+  }
+}

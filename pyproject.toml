@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=77"]  # for the SPDX license expression
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pixdrop"
+version = "1.0.0"
+description = "Generate images with AI models (OpenRouter) through a token-protected web API, MCP server and UI."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.159,<1",
+    "uvicorn>=0.54,<1",
+    "python-multipart>=0.0.32",
+    "httpx2>=2.16,<3",  # the upstream client (also used by the MCP SDK and Starlette's TestClient)
+    "pillow>=12",
+    "cairosvg>=2.8,<3",  # SVG reference images (needs the cairo library)
+    "defusedxml>=0.7",  # reads SVG files safely (CairoSVG uses it too)
+    "tzdata>=2026.1",
+    "mcp>=2.3,<3",  # the MCP server (ENABLE_MCP=1)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pixdrop = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "docker: builds the Docker image and tests the running container",
+]
+filterwarnings = ["error::pytest.PytestUnraisableExceptionWarning"]

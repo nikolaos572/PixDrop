@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# Runtime data (mounted volume when run locally): keys, tokens and generated images
+/data/
+/config.json
+/users.json
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store

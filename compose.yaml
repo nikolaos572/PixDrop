@@ -1,0 +1,24 @@
+# Example deployment: docker compose up -d
+# Before the first start: mkdir data && sudo chown 1001:1001 data, then create data/config.json
+# (providers and models) and data/users.json (users and tokens): see docs/CONFIGURATION.md.
+services:
+  pixdrop:
+    image: pixdrop:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: UTC                          # time zone used to display dates, e.g. Europe/Athens
+      PUBLIC_BASE_URL: ""              # e.g. https://pixdrop.example.com: the base of the URLs handed out
+      GENERATION_TIMEOUT_SECONDS: "180"
+      MAX_UPLOAD_MB: "20"              # largest reference image
+      MAX_ACTIVE_JOBS: "4"             # per user, jobs waiting or generating at the same time
+      ENABLE_MCP: "0"                  # 1 serves the MCP server for AI agents at /mcp (docs/MCP.md)
+      FORWARDED_ALLOW_IPS: "*"         # reverse proxies trusted for X-Forwarded-* (docs/DEPLOYMENT.md)
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

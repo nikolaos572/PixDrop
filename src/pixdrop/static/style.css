@@ -1,0 +1,502 @@
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1d2330;
+  --muted: #667085;
+  --border: #d9dde4;
+  --accent: #2f5bd3;
+  --accent-text: #ffffff;
+  --danger: #c4372b;
+  --ok: #1d7a46;
+  --warn: #9a6400;
+  --radius: 10px;
+  color-scheme: light;
+}
+
+/* Chosen in the header, or by the browser in Auto (theme.js sets data-theme). */
+:root[data-theme="dark"] {
+  --bg: #14171c;
+  --surface: #1d2129;
+  --text: #e4e7ec;
+  --muted: #98a2b3;
+  --border: #343a46;
+  --accent: #6b8ff0;
+  --accent-text: #0d1117;
+  --danger: #f07167;
+  --ok: #4cc38a;
+  --warn: #e0b354;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--accent); }
+
+.muted { color: var(--muted); }
+.spacer { flex: 1; }
+
+/* Read by screen readers, not shown; and the text area copyText() selects to copy. */
+.visually-hidden, .offscreen {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.topbar a, .topbar button { white-space: nowrap; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 10px 14px; }
+
+/* Outline icons drawn with the text colour. */
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The symbols app.js draws icons from: defined, never shown themselves. */
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Bordered links and buttons (the logo, the pages, Log out, API Documentation), tinted on hover. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.pill:hover, .pill[aria-current="page"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.pill.danger { color: var(--danger); border-color: var(--danger); }
+.pill.danger:hover { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.pill.small { gap: 6px; padding: 3px 10px; font-size: 13px; }
+.brand { font-weight: 700; }
+.brand .icon { width: 18px; height: 18px; }
+
+/* Light, Dark and Auto: three icon buttons in one bordered group as tall as the pills, the chosen one tinted. */
+.theme-switch { display: inline-flex; align-self: stretch; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.theme-switch button { padding: 0 12px; color: var(--muted); background: transparent; border: 0; border-radius: 0; }
+.theme-switch button + button { border-left: 1px solid var(--border); }
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+main {
+  max-width: 1150px;
+  margin: 24px auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 20px;
+}
+
+.card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+
+h1, h2 { margin: 0; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+
+label, .label { font-weight: 600; font-size: 14px; }
+
+input, select, button, textarea { font: inherit; }
+
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+textarea { display: block; min-height: 7.5em; resize: vertical; line-height: 1.5; }
+input:disabled, select:disabled, textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+input:invalid { border-color: var(--danger); }
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 18px;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.secondary { color: var(--text); background: transparent; border-color: var(--border); }
+button.secondary:not(:disabled):hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+button.danger { color: var(--danger); background: transparent; border-color: var(--danger); }
+button.small { padding: 3px 10px; font-size: 13px; }
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 220px;
+  padding: 24px;
+  text-align: center;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone strong { font-size: 18px; word-break: break-word; }
+.dropzone span { font-weight: 400; }
+.dropzone:hover, .dropzone:focus-visible, .dropzone.dragging {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  outline: none;
+}
+/* The chosen model takes no (more) reference images. */
+.dropzone.disabled, .dropzone.disabled:hover { cursor: not-allowed; border-color: var(--border); background: transparent; }
+.dropzone.disabled strong, .dropzone.disabled .drop-icon { color: var(--muted); }
+.dropzone.over strong { color: var(--danger); }
+.drop-icon { width: 26px; height: 26px; color: var(--accent); }
+#drop-hint { white-space: pre-line; }
+
+.field { min-width: 160px; }
+
+.message { min-height: 1.5em; margin: 12px 0 0; white-space: pre-wrap; }
+.message.error { color: var(--danger); }
+.message.ok { color: var(--ok); }
+
+.section-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 8px 10px; text-align: left; vertical-align: top; border-top: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; border-top: none; white-space: nowrap; }
+td { overflow-wrap: break-word; }
+td.nowrap { white-space: nowrap; }
+th.number, td.number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The statistics' tables share their columns, so that they line up one under the other. */
+.stats-table { min-width: 760px; table-layout: fixed; }
+.stats-table th:first-child { width: 20%; }
+.stats-table th, .stats-table th.number { white-space: normal; vertical-align: bottom; }
+
+.badge {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.badge.pending { color: var(--muted); }
+.badge.generating { color: var(--warn); }
+.badge.completed { color: var(--ok); }
+.badge.failed { color: var(--danger); }
+.badge.default { color: var(--accent); font-size: 12px; padding: 0 7px; }
+
+/* A failed job's "?", and its error, which app.js shows over the page next to the "?". */
+.error-hint {
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+  cursor: help;
+}
+.error-tooltip {
+  position: fixed;
+  z-index: 10;
+  max-width: min(560px, calc(100vw - 16px));
+  max-height: 60vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--danger);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 25%);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.links, .actions { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+
+.card h3, .job-dialog h3 { margin: 18px 0 8px; font-size: 15px; }
+.info-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+.facts { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+code { font: 0.92em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.facts code { user-select: all; }
+/* A command to copy as a whole (the MCP setup line). */
+.command {
+  display: block;
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .info-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .facts dd { margin-bottom: 8px; }
+}
+
+.pager { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 14px; }
+.pager[hidden] { display: none; }
+
+.login { display: grid; place-items: center; min-height: 90vh; }
+.login form { display: grid; gap: 10px; width: min(380px, 100%); }
+.login h1 { margin-bottom: 8px; }
+.login .message { margin: 0; }
+
+/* --- Generate: the prompt and the model's options beside the reference images --- */
+
+.generate { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px 28px; }
+.generate .field { min-width: 0; }
+.generate .field > label, .generate .label { display: block; } /* the two columns' labels line up */
+/* The model, with its description beside it, then its options. */
+.model-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 16px; margin-top: 14px; }
+.model-field { flex: 0 1 260px; }
+.model-row .hint { flex: 1 1 240px; margin: 0; padding-bottom: 9px; }
+.option-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 14px; margin-top: 12px; }
+.option-fields:empty { display: none; }
+.model-row select, .option-fields input, .option-fields select { height: 40px; }
+.hint { margin: 8px 0 0; font-size: 13px; }
+
+.generate-references { display: flex; flex-direction: column; min-width: 0; }
+.generate-references .dropzone { flex: 1; min-height: 150px; margin-top: 4px; padding: 18px; }
+.generate-references .dropzone strong { font-size: 16px; }
+
+.generate-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 14px; }
+.generate-actions button { height: 40px; padding: 0 26px; }
+#generate .message { text-align: center; }
+
+/* Pictures that may be transparent are shown over a light checkerboard. */
+.checkered {
+  --check: color-mix(in srgb, var(--text) 8%, transparent);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(45deg, var(--check) 25%, transparent 25%, transparent 75%, var(--check) 75%),
+    linear-gradient(45deg, var(--check) 25%, transparent 25%, transparent 75%, var(--check) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.reference-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px; margin: 12px 0 0; padding: 0; }
+.reference-list[hidden] { display: none; }
+.reference { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
+.reference img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border: 1px solid var(--border); border-radius: 8px; }
+.reference .name { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.reference.over-limit img { border-color: var(--danger); opacity: 0.6; }
+.reference button { width: 100%; }
+
+/* --- History: a grid of job cards, each opening the job's dialog --- */
+
+.job-grid { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin: 0; padding: 0; }
+.job-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.job-card:hover { border-color: var(--accent); box-shadow: 0 4px 16px rgb(0 0 0 / 10%); }
+.job-card:has(.job-open:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.job-open { display: block; width: 100%; padding: 0; color: inherit; background: none; border: 0; border-radius: 0; }
+.job-open:focus-visible { outline: none; }
+.job-open::after { content: ""; position: absolute; inset: 0; } /* the whole card opens the job */
+.job-thumb { position: relative; display: grid; aspect-ratio: 1; overflow: hidden; background: var(--bg); border-bottom: 1px solid var(--border); }
+.job-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.job-body { display: grid; gap: 6px; padding: 10px 12px 12px; }
+.job-status { display: flex; align-items: center; gap: 6px; }
+.job-status .error-hint { position: relative; z-index: 1; margin-left: 0; } /* above the card's button */
+.job-prompt {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+/* The model and the cost on one line, the time below: the same two lines on every card. */
+.job-meta { display: flex; flex-wrap: wrap; gap: 0 10px; margin: 0; color: var(--muted); font-size: 13px; }
+.job-meta .model { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-meta .cost { font-variant-numeric: tabular-nums; }
+.job-meta time { flex-basis: 100%; }
+
+/* How many images and reference images a job has, over its thumbnail. */
+.markers { position: absolute; bottom: 8px; left: 8px; display: flex; gap: 6px; }
+.marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  color: #fff;
+  background: rgb(0 0 0 / 62%);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.marker .icon { width: 13px; height: 13px; }
+
+/* What a job without a picture shows instead: its status. */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.placeholder .icon { width: 30px; height: 30px; stroke-width: 1.6; }
+.placeholder.pending {
+  background: repeating-linear-gradient(-45deg, transparent 0 12px, color-mix(in srgb, var(--muted) 7%, transparent) 12px 24px);
+}
+.placeholder.generating {
+  color: var(--warn);
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, var(--warn) 13%, transparent) 50%, transparent 65%);
+  background-size: 300% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+.placeholder.generating .icon { animation: pulse 1.8s ease-in-out infinite; }
+.placeholder.failed { color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes pulse { 50% { opacity: 0.45; transform: scale(0.9); } }
+@media (prefers-reduced-motion: reduce) {
+  .placeholder.generating, .placeholder.generating .icon { animation: none; }
+}
+
+/* --- The job dialog --- */
+
+.job-dialog {
+  width: min(1100px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 0;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 35%);
+}
+.job-dialog::backdrop { background: rgb(12 15 20 / 60%); }
+body:has(.job-dialog[open]) { overflow: hidden; } /* the page stays put behind the dialog */
+.dialog-inner { padding: 0 22px 22px; }
+/* Stays at the top while the dialog scrolls, so that Close is always at hand. */
+.dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 -22px 16px;
+  padding: 14px 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.dialog-head h2 { overflow-wrap: anywhere; }
+.dialog-inner > .message { margin: 0 0 14px; }
+.dialog-inner > .message:empty { display: none; }
+.dialog-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.dialog-side h3:first-child { margin-top: 0; }
+.dialog-side .facts { grid-template-columns: 9.5rem minmax(0, 1fr); }
+.prompt-text { margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog-error { color: var(--danger); white-space: pre-wrap; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.dialog-images { display: grid; gap: 20px; }
+.dialog-images.several { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.preview { min-width: 0; margin: 0; }
+.preview-link { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; }
+.preview-link img { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+.preview figcaption { margin: 8px 0; color: var(--muted); font-size: 13px; }
+.preview .actions { gap: 6px 8px; }
+.dialog-placeholder { aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; }
+.dialog-placeholder .placeholder { font-size: 15px; }
+
+.ref-thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.ref-thumbs a { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; }
+.ref-thumbs img { display: block; width: 64px; height: 64px; object-fit: cover; }
+
+/* --- Statistics --- */
+
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0; }
+.tile { min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); }
+.tile dt { color: var(--muted); font-size: 13px; font-weight: 600; }
+.tile dd { margin: 0; }
+.tile .value { font-size: 26px; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tile .sub { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .dialog-columns { grid-template-columns: minmax(0, 1fr); }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 800px) {
+  .generate { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .topbar { padding: 10px 16px; gap: 10px; }
+  .pill { padding: 8px 12px; }
+  .card { padding: 16px; }
+  .job-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .job-body { padding: 8px 10px 10px; }
+  .tile .value { font-size: 21px; }
+  .dialog-inner { padding: 0 16px 16px; }
+  .dialog-head { margin: 0 -16px 14px; padding: 12px 16px; }
+  .dialog-side .facts { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PixDrop · Log in</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
+  <script src="/static/login.js" defer></script>
+</head>
+<body>
+  <main class="login">
+    <form id="login-form" class="card">
+      <h1>PixDrop</h1>
+      <label for="token">Access token</label>
+      <input id="token" name="token" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit">Log in</button>
+      <p id="login-error" class="message error" role="alert"></p>
+    </form>
+  </main>
+</body>
+</html>

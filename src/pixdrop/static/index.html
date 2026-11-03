@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PixDrop</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
+  <script src="/static/common.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <!-- Icons that app.js draws with <use href="#icon-...">. -->
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-images" viewBox="0 0 24 24"><rect x="7" y="7" width="14" height="14" rx="2"/><path d="M3 17V5a2 2 0 0 1 2-2h12"/><path d="M21 17l-4-4-6 6"/></symbol>
+    <symbol id="icon-paperclip" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="icon-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6-5.6-1.9 5.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></symbol>
+    <symbol id="icon-picture" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <a href="/" class="pill brand">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      PixDrop
+    </a>
+    <nav>
+      <a href="/stats" class="pill">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        Statistics
+      </a>
+      <a href="/info" class="pill">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+        Server Info
+      </a>
+    </nav>
+    <div class="theme-switch" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="light" title="Light theme" aria-label="Light theme">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+      <button type="button" data-theme-choice="dark" title="Dark theme" aria-label="Dark theme">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button type="button" data-theme-choice="auto" title="Auto: the browser's theme" aria-label="Auto theme (the browser's)">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </button>
+    </div>
+    <span class="spacer"></span>
+    <span id="user" class="muted"></span>
+    <button id="logout" type="button" class="pill danger">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M6 4l7 2v13l-7 2M11 12h.01"/></svg>
+      Log out
+    </button>
+  </header>
+
+  <main>
+    <section id="generate" class="card" aria-label="Generate">
+      <form id="generate-form" class="generate" novalidate>
+        <div class="generate-main">
+          <div class="field">
+            <label for="prompt">Prompt</label>
+            <textarea id="prompt" rows="6" spellcheck="true" placeholder="Describe the image: subject, style, lighting, composition…"></textarea>
+          </div>
+          <div class="model-row">
+            <div class="field model-field">
+              <label for="model">Model</label>
+              <select id="model" aria-describedby="model-hint" disabled></select>
+            </div>
+            <p id="model-hint" class="hint muted"></p>
+          </div>
+          <!-- The chosen model's options, added by app.js. -->
+          <div id="option-fields" class="option-fields"></div>
+        </div>
+
+        <div class="generate-references">
+          <span id="references-label" class="label">Reference images <span class="muted">(optional)</span></span>
+          <label id="dropzone" class="dropzone" tabindex="0" role="button" aria-labelledby="references-label drop-title" aria-describedby="drop-hint">
+            <input id="reference-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" multiple hidden>
+            <svg class="icon drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            <strong id="drop-title">Drop images here</strong>
+            <span id="drop-hint" class="muted">or click to choose, or paste one</span>
+          </label>
+          <ul id="reference-list" class="reference-list" aria-label="Chosen reference images" hidden></ul>
+        </div>
+
+        <div class="generate-actions">
+          <button id="generate-button" type="submit" disabled>
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkle"/></svg>
+            Generate
+          </button>
+          <span id="shortcut" class="muted">or Ctrl+Enter in the prompt</span>
+        </div>
+      </form>
+      <p id="message" class="message" role="status"></p>
+    </section>
+
+    <section id="history" class="card" aria-labelledby="history-title">
+      <div class="section-head">
+        <h2 id="history-title">History</h2>
+        <span class="spacer"></span>
+        <button id="refresh" type="button" class="secondary">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+          Refresh
+        </button>
+      </div>
+      <p id="no-jobs" class="muted" hidden>No images yet: describe one above and press Generate.</p>
+      <ul id="job-grid" class="job-grid" aria-label="Your jobs, newest first"></ul>
+      <div id="pager" class="pager" hidden>
+        <button id="previous-page" type="button" class="secondary small">‹ Previous</button>
+        <span id="page-info" class="muted"></span>
+        <button id="next-page" type="button" class="secondary small">Next ›</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="job-dialog" class="job-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-inner">
+      <div class="section-head dialog-head">
+        <h2 id="dialog-title">Job</h2>
+        <span id="dialog-status"></span>
+        <span class="spacer"></span>
+        <button id="dialog-close" type="button" class="secondary" autofocus>Close</button>
+      </div>
+      <p id="dialog-message" class="message" role="status"></p>
+      <span id="dialog-live" class="visually-hidden" role="status"></span>
+      <div class="dialog-columns">
+        <div id="dialog-images" class="dialog-images"></div>
+        <div class="dialog-side">
+          <h3>Prompt</h3>
+          <p id="dialog-prompt" class="prompt-text"></p>
+          <div class="actions">
+            <button id="copy-prompt" type="button" class="secondary small">Copy prompt</button>
+            <button id="reuse-prompt" type="button" class="secondary small">Reuse prompt</button>
+          </div>
+          <div id="dialog-reply" hidden>
+            <h3>Model's reply</h3>
+            <p id="dialog-text" class="prompt-text"></p>
+          </div>
+          <h3>Details</h3>
+          <dl id="dialog-facts" class="facts"></dl>
+        </div>
+      </div>
+    </div>
+  </dialog>
+  <pre id="error-tooltip" class="error-tooltip" role="tooltip" hidden></pre>
+</body>
+</html>

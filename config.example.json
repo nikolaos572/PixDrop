@@ -1,0 +1,42 @@
+{
+  "providers": {
+    "openrouter": {
+      "api_key": "sk-or-v1-<your-OpenRouter-key>",
+      "headers": {"X-OpenRouter-Title": "PixDrop"}
+    }
+  },
+  "default_model": "sunburst",
+  "models": {
+    "sunburst": {
+      "provider": "openrouter",
+      "model": "openai/gpt-image-2.5-sunburst",
+      "api_type": "images",
+      "description": "OpenAI GPT Image 2.5 Sunburst: precise, follows instructions closely, transparent backgrounds for sprites",
+      "defaults": {"quality": "high"}
+    },
+    "qwen": {
+      "provider": "openrouter",
+      "model": "qwen/qwen-image-3",
+      "api_type": "images",
+      "description": "Qwen Image 3: sharp text and small details in images; up to 3 reference images"
+    },
+    "nano-banana": {
+      "provider": "openrouter",
+      "model": "google/gemini-3.1-flash-image",
+      "api_type": "images",
+      "description": "Google Gemini 3.1 Flash Image: fast, good at editing with up to 14 reference images"
+    },
+    "flux": {
+      "provider": "openrouter",
+      "model": "black-forest-labs/flux-3-image",
+      "api_type": "images",
+      "description": "FLUX 3: photographic and painted styles, up to 4K"
+    },
+    "vector": {
+      "provider": "openrouter",
+      "model": "recraft/recraft-v4.1-vector",
+      "api_type": "images",
+      "description": "Recraft V4.1 Vector: SVG icons and logos"
+    }
+  }
+}
