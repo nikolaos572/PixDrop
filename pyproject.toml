@@ -19,6 +19,7 @@ dependencies = [
     "defusedxml>=0.7",  # reads SVG files safely (CairoSVG uses it too)
     "tzdata>=2026.1",
     "mcp>=2.3,<3",  # the MCP server (ENABLE_MCP=1)
+    "questionary>=2.1,<3",  # the checklist of python -m pixdrop modify-models
 ]
 
 [project.optional-dependencies]
@@ -30,7 +31,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-pixdrop = ["static/*"]
+pixdrop = ["static/*", "default_config.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

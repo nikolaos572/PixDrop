@@ -1,6 +1,12 @@
-"""Run the server, manage the users, or show every user's statistics.
+"""Run the server, set up the models, manage the users, or show every user's statistics.
 
     python -m pixdrop                          the server
+    python -m pixdrop setup                    ask for the provider's API key and write
+                                               config.json with the default models, replacing
+                                               any that is there; with Docker:
+                                               docker exec -it pixdrop python -m pixdrop setup
+    python -m pixdrop modify-models            add and remove models, from the providers' lists
+                                               (needs a terminal too)
     python -m pixdrop adduser NAME             add a user and print their new token; with
                                                Docker:
                                                docker exec pixdrop python -m pixdrop adduser NAME
@@ -31,7 +37,8 @@ from . import __version__, logs
 from .accounts import add_user, reset_token
 from .app import create_app
 from .config import parse_config
-from .discovery import capabilities_of
+from .configure import run_modify_models, run_setup
+from .discovery import capabilities_of, read_entries, references_of, summary_of
 from .errors import ConfigError
 from .settings import Settings, SettingsError
 from .stats import StatsOut, Totals, statistics
@@ -48,6 +55,8 @@ SHUTDOWN_SECONDS = 5
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pixdrop", description="PixDrop: generate images with AI models.")
     commands = parser.add_subparsers(dest="command")
+    commands.add_parser("setup", help="ask for the API key and write config.json with the default models, replacing any that is there")
+    commands.add_parser("modify-models", help="add and remove models, from the providers' lists")
     add_parser = commands.add_parser("adduser", help="add a user and print their new token")
     add_parser.add_argument("name", help="the user's name: 1-32 of a-z, 0-9, '_' and '-', starting with a letter or a digit")
     reset_parser = commands.add_parser("reset-token", help="give a user a new token and print it (the old one stops working)")
@@ -63,6 +72,10 @@ def main(argv: list[str] | None = None) -> None:
     # without it (as in Docker) rather than in the system's time zone.
     os.environ.setdefault("TZ", "UTC")
     time.tzset()
+    if arguments.command == "setup":
+        sys.exit(run_setup())
+    if arguments.command == "modify-models":
+        sys.exit(run_modify_models())
     if arguments.command == "adduser":
         sys.exit(print_new_token(add_user, arguments.name, f"Added user {arguments.name}. Their token:"))
     if arguments.command == "reset-token":
@@ -180,12 +193,9 @@ def show_models(search: str | None, as_json: bool) -> int:
         configured.setdefault((model.provider.name, model.upstream), []).append(name)
     status, found = 0, []
     for provider in catalog.providers.values():
-        headers = {**provider.headers, "Authorization": f"Bearer {provider.api_key}"}
         try:
-            response = httpx2.get(f"{provider.base_url}/images/models", headers=headers, timeout=30)
-            response.raise_for_status()
-            entries = [entry for entry in response.json()["data"] if isinstance(entry, dict) and "id" in entry]
-        except (httpx2.HTTPError, ValueError, KeyError, TypeError) as exc:
+            entries = read_entries(provider)
+        except (httpx2.HTTPError, ValueError) as exc:
             print(f"error: cannot read the model catalogue of {provider.name}: {exc}", file=sys.stderr)
             status = 1
             continue
@@ -205,14 +215,12 @@ def show_models(search: str | None, as_json: bool) -> int:
 
 def _model_entry(entry: dict, configured_as: list[str], provider: str, *, detailed: bool) -> str:
     """One model of a catalogue: a line, or (detailed) its options and a configuration to copy."""
-    capabilities = capabilities_of(entry)
-    references = f"{capabilities.min_references}-{capabilities.max_references}" if capabilities.max_references else "none"
     mark = f"  [configured as {', '.join(map(repr, configured_as))}]" if configured_as else ""
     if not detailed:
-        options = ", ".join(capabilities.specs) or "-"
-        return f"  {entry['id']}{mark}\n      reference images {references}; options: {options}"
+        return f"  {entry['id']}{mark}\n      {summary_of(entry)}"
+    capabilities = capabilities_of(entry)
     lines = [f"  {entry['id']}{mark}", f"      {entry.get('name', '')}: {entry.get('description', '')}".rstrip(": "),
-             f"      reference images: {references}"]  # fmt: skip
+             f"      reference images: {references_of(capabilities)}"]  # fmt: skip
     for name, spec in capabilities.specs.items():
         values = " ".join(spec.values) if spec.kind == "enum" else f"{spec.minimum}-{spec.maximum}" if spec.kind == "integer" else spec.pattern
         lines.append(f"      {name}: {values}")

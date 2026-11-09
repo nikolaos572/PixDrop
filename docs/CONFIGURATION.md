@@ -1,9 +1,9 @@
 # Configuration
 
-Two files in the data directory hold the configuration: `users.json` (the users and
-their tokens, managed with [commands](#users)) and `config.json` (the providers and
-models). Everything else is an environment variable. How to run the service is in
-[DEPLOYMENT.md](DEPLOYMENT.md).
+Two files in the data directory hold the configuration, both managed with commands:
+`users.json` ([the users](#users) and their tokens) and `config.json`
+([the providers and models](#providers-and-models)). Everything else is an environment
+variable. How to run the service is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 **Contents**
 
@@ -81,11 +81,52 @@ the file comes from, or mount it without `:ro`, for uid 1001 to write it.
 
 ## Providers and models
 
-`data/config.json` says which image models users can choose, and how to reach them (see
-[`config.example.json`](../config.example.json)). For each model it names the provider,
-the provider's id of the model and the API to call; what the model accepts (its options,
-their values, how many reference images) PixDrop reads from the provider's model
-catalogue:
+Two commands manage the models. Run them on the running container, in a terminal (hence
+`-it`), at any time, without a restart:
+
+```bash
+docker exec -it pixdrop python -m pixdrop setup           # asks for your OpenRouter key, adds the default models
+docker exec -it pixdrop python -m pixdrop modify-models   # a checklist to add and remove models
+```
+
+With Docker Compose, they start with `docker compose exec pixdrop` instead of
+`docker exec -it pixdrop`. Without Docker, set the same environment as the server's:
+`DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop setup`.
+
+**`setup`** asks for the key (without showing it), asks OpenRouter whether it accepts the key,
+and reads OpenRouter's catalogue to check that it still offers every default model. Only
+then does it write `config.json`, with the default models of
+[`default_config.json`](../src/pixdrop/default_config.json), and it shows what each one
+accepts. If anything is wrong (the key is refused or is a management key, which cannot
+generate images, a default model is gone, OpenRouter cannot be reached), it says so, exits
+with status 1, and writes nothing. A script can pipe the key:
+`docker exec -i pixdrop python -m pixdrop setup < key.txt`.
+
+Running `setup` again **replaces the whole file**: the old key, every other provider and
+every model you added are deleted, and the default models come back with the new key. It says
+so before asking for the key, and until you give a key that works the old file stays. Use it
+to change the key, or to start over.
+
+**`modify-models`** reads the catalogue of every provider in the file and shows a checklist,
+which starts with the models you have: arrows move, space ticks or unticks, typing searches,
+enter saves and Ctrl-C cancels. A model you add gets its name from the end of its id
+(`openai/gpt-image-2` becomes `gpt-image-2`, or the whole id if that name is taken) and its
+description from the catalogue. The models you keep stay exactly as they are, and the key is
+not touched. A model you have that its provider no longer offers is marked, so that you can
+remove it. It then asks for the default model, if more than one is left. It needs a terminal,
+and a file to change: run `setup` first.
+
+Neither command writes a model's options: the server reads them from the catalogue, so that
+they follow what the provider offers.
+
+### The configuration file
+
+`data/config.json` says which image models users can choose, and how to reach them. You can
+also edit it by hand, or write it yourself: `setup` is not needed then, and
+[`default_config.json`](../src/pixdrop/default_config.json) is a good start. For each model
+it names the provider, the provider's id of the model and the API to call; what the model
+accepts (its options, their values, how many reference images) PixDrop reads from the
+provider's model catalogue:
 
 ```json
 {

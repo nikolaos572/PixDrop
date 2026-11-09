@@ -4,7 +4,8 @@ It answers POST /api/v1/images and POST /api/v1/chat/completions as OpenRouter d
 a picture drawn from the prompt (a colour of its own and the prompt's first words; an SVG
 for output_format svg), and lists its models with their parameters at
 GET /api/v1/images/models (CATALOGUE), so PixDrop can be run and tried without a key and
-without cost. Point a provider at it:
+without cost. GET /api/v1/key accepts any key but REJECTED_KEY, and says that MANAGEMENT_KEY
+is a management key, which OpenRouter does not let generate. Point a provider at it:
 
     {"providers": {"fake": {"base_url": "http://127.0.0.1:9000/api/v1", "api_key": "anything"}}}
 
@@ -29,6 +30,8 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 COST = 0.04  # USD per image, as OpenRouter would report it
+REJECTED_KEY = "rejected-key"
+MANAGEMENT_KEY = "management-key"
 
 # The models, with their parameters, as OpenRouter's GET /images/models lists them.
 CATALOGUE: dict[str, Any] = {
@@ -151,6 +154,13 @@ def answer(path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
 class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 (the standard library's name)
+        if self.path == "/api/v1/key":
+            if self.headers.get("Authorization", "") in ("", f"Bearer {REJECTED_KEY}"):
+                self._send(401, {"error": {"code": 401, "message": "User not found."}})
+            else:
+                management = self.headers["Authorization"] == f"Bearer {MANAGEMENT_KEY}"
+                self._send(200, {"data": {"label": "fake", "is_management_key": management, "is_provisioning_key": False}})
+            return
         if self.path != "/api/v1/images/models":
             self._send(404, {"error": {"code": 404, "message": f"no such endpoint {self.path}"}})
             return
