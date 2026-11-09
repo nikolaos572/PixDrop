@@ -1,4 +1,5 @@
-"""Users and their API tokens, read from a JSON file the administrator edits (USERS_FILE).
+"""Users and their API tokens, read from a JSON file (USERS_FILE), which the administrator
+changes with commands (accounts.py) or by hand.
 
 The file maps user names to tokens, in the same format as TeXdrop's, so that one file can
 serve both::

@@ -48,6 +48,8 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     storage.prepare()
     store = JobStore(storage)
     users = UserRegistry(settings.users_file)
+    if not users.names():
+        log.warning("no users yet: add one with python -m pixdrop adduser <name>")
     models = ModelRegistry(settings.config_file)
     service = JobService(
         store, storage, models, max_active_jobs=settings.max_active_jobs, pending_seconds=settings.link_expiry_seconds

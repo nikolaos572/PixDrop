@@ -11,8 +11,10 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   (or, for a transfer link, its secret), compared in constant time with every known
   token. A token is accepted in the `Authorization` or `X-API-Key` header, in the URL
   (`?token=`), or in the web page's cookie; the first of these that a request
-  has decides. The users file is re-read when it changes, so a removed token stops working
-  at once.
+  has decides. The users file is re-read when it changes, so a removed or replaced token
+  stops working at once. `python -m pixdrop adduser` and `reset-token` make random 256-bit
+  tokens. The file holds the tokens as they are, so `adduser` creates it readable only by its
+  owner; keep it that way.
 - **The web page's cookie** is `HttpOnly` (scripts cannot read it), `SameSite=Strict`, and
   `Secure` over HTTPS. Changes made with it require an `X-Requested-With` header, which
   other sites cannot send without the server's consent, and the server gives none (no

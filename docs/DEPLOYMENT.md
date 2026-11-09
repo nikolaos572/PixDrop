@@ -40,16 +40,21 @@ image libraries (Pillow, cairo).
 The container runs as uid 1001, which must own the data directory:
 
 ```bash
-mkdir data                                   # then create data/users.json and data/config.json (see CONFIGURATION.md)
+mkdir data                                   # then create data/config.json (see CONFIGURATION.md)
 sudo chown -R 1001:1001 data
 
 docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens \
   --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
   pixdrop
+
+docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](../compose.yaml). Everything the service stores
+or `docker compose up -d` with [`compose.yaml`](../compose.yaml), and
+`docker compose exec pixdrop python -m pixdrop adduser alice`. Until a user exists, the
+server refuses every request. [CONFIGURATION.md](CONFIGURATION.md#users) has more on the
+users and on replacing a lost token. Everything the service stores
 is in the data directory, so the container can be removed and started again from a new
 image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
 
@@ -75,7 +80,8 @@ reference images. Then, as an unprivileged user (best a dedicated one):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install .
-mkdir -p ~/pixdrop-data                      # then create users.json and config.json in it
+mkdir -p ~/pixdrop-data                      # then create config.json in it
+DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop adduser alice    # prints alice's token
 DATA_DIR=~/pixdrop-data PORT=8000 .venv/bin/python -m pixdrop
 ```
 
@@ -88,7 +94,7 @@ them.
 ```
 data/
 ├── config.json                            providers and models (you create this)
-├── users.json                             users and tokens (you create this)
+├── users.json                             users and tokens (python -m pixdrop adduser creates this)
 ├── outputs/<user>/<id>.json               a job's record: its request, status and results
 ├── outputs/<user>/<id>.png                its image (.png, .jpg, .webp, .gif or .svg, after the format)
 ├── outputs/<user>/<id>_2.png              its further images, when it has several (_2, _3, ...)

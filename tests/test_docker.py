@@ -11,6 +11,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -270,6 +271,95 @@ def test_the_stats_command_shows_every_user(server):
     assert "tester" in table and "ALL USERS" in table
     report = json.loads(docker("exec", server.container, "python", "-m", "pixdrop", "stats", "--json"))
     assert report[0]["user"] == "tester" and report[0]["totals"]["completed"] == 1
+
+
+def manage(container: str, *arguments: str, user: str = "app") -> subprocess.CompletedProcess[str]:
+    """A command of python -m pixdrop, as the administrator runs it with docker exec."""
+    command = ["docker", "exec", "--user", user, container, "python", "-m", "pixdrop", *arguments]
+    return subprocess.run(command, capture_output=True, text=True, check=False)
+
+
+def session_of(server: Server, token: str) -> int:
+    return httpx2.get(f"{server.url}/api/session", headers={"Authorization": f"Bearer {token}"}).status_code
+
+
+def test_users_are_managed_while_the_server_runs(image, data):
+    (data / "users.json").unlink()
+    server = Server(image, data)
+    try:
+        assert session_of(server, TOKEN) == 401
+        added = manage(server.container, "adduser", "nikos")
+        assert added.returncode == 0, added.stderr
+        assert added.stderr == "Added user nikos. Their token:\n"
+        first = added.stdout.strip()
+        assert session_of(server, first) == 200
+        written = (data / "users.json").stat()
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+
+        reset = manage(server.container, "reset-token", "nikos")
+        assert reset.returncode == 0, reset.stderr
+        second = reset.stdout.strip()
+        assert (session_of(server, first), session_of(server, second)) == (401, 200)
+
+        refused = manage(server.container, "adduser", "nikos")
+        assert (refused.returncode, refused.stdout) == (1, "")
+        assert refused.stderr.startswith("error: user 'nikos' already exists")
+    finally:
+        server.stop()
+    restarted = Server(image, data)  # the server can read what the command wrote
+    try:
+        assert session_of(restarted, second) == 200
+    finally:
+        restarted.stop()
+
+
+def test_a_command_run_as_root_keeps_the_file_readable_by_the_server(image, data):
+    server = Server(image, data, hardened=False)
+    try:
+        before = (data / "users.json").stat()
+        added = manage(server.container, "adduser", "nikos", user="root")
+        assert added.returncode == 0, added.stderr
+        after = (data / "users.json").stat()
+        assert (after.st_uid, after.st_gid, after.st_mode) == (before.st_uid, before.st_gid, before.st_mode)
+        assert after.st_ino != before.st_ino  # replaced, not written over
+        assert session_of(server, added.stdout.strip()) == 200
+    finally:
+        server.stop()
+
+
+def test_a_users_file_mounted_by_itself_is_written_over(image, data, tmp_path):
+    shared = tmp_path / "shared.json"
+    shared.write_text(json.dumps({"texdrop": {"limit": 1}, "users": {"tester": TOKEN}}))
+    shared.chmod(0o666)
+    server = Server(image, data, "--volume", f"{shared}:/data/users.json")
+    try:
+        added = manage(server.container, "adduser", "nikos")
+        assert added.returncode == 0, added.stderr
+        token = added.stdout.strip()
+        assert json.loads(shared.read_text()) == {"texdrop": {"limit": 1}, "users": {"tester": TOKEN, "nikos": token}}
+        assert session_of(server, token) == 200 and session_of(server, TOKEN) == 200
+        assert not list(data.glob(".*.tmp"))
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize(("mode", "reason"), [(0o644, "Permission denied"), (0o666, "Read-only file system")])
+def test_a_users_file_mounted_read_only_is_refused(image, data, tmp_path, mode, reason):
+    shared = tmp_path / "shared.json"
+    shared.write_text(json.dumps({"users": {"tester": TOKEN}}))
+    shared.chmod(mode)
+    before = shared.read_bytes()
+    server = Server(image, data, "--volume", f"{shared}:/data/users.json:ro")
+    try:
+        refused = manage(server.container, "adduser", "nikos")
+        assert (refused.returncode, refused.stdout) == (1, "")
+        assert refused.stderr.startswith("error: ") and reason in refused.stderr and "/data/users.json" in refused.stderr
+        assert "Traceback" not in refused.stderr
+        assert shared.read_bytes() == before
+        assert session_of(server, TOKEN) == 200
+        assert not list(data.glob(".*.tmp"))
+    finally:
+        server.stop()
 
 
 def test_the_log_file_outlives_the_container_and_hides_tokens(image, data):
