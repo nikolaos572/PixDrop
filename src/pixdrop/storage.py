@@ -83,7 +83,7 @@ class Storage:
             record = make(job_id)
             try:
                 with (directory / f"{job_id}.json").open("x", encoding="utf-8") as file:  # O_EXCL: never reuses an id
-                    _dump(record, file)
+                    dump_json(record, file)
                 return record
             except FileExistsError:
                 continue
@@ -116,7 +116,7 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex[:8]}.tmp")
     try:
         with temporary.open("w", encoding="utf-8") as file:
-            _dump(value, file)
+            dump_json(value, file)
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -135,7 +135,8 @@ def write_file(path: Path, content: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _dump(value: dict[str, Any], file: Any) -> None:
+def dump_json(value: dict[str, Any], file: Any) -> None:
+    """Write `value` to an open file, and make sure that it reaches the disk."""
     json.dump(value, file, indent=2, ensure_ascii=False)
     file.write("\n")
     file.flush()

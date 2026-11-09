@@ -35,10 +35,6 @@ through its MCP server and by programs through its HTTP API, and also has a web 
 docker build -t pixdrop .
 
 mkdir data
-openssl rand -hex 32                         # run once per user to make a token
-cat > data/users.json <<'EOF'
-{"users": {"alice": "<token for alice>", "bob": "<token for bob>"}}
-EOF
 cp config.example.json data/config.json      # then put your OpenRouter key in it, and choose the models
 sudo chown -R 1001:1001 data                 # the container runs as uid 1001
 
@@ -46,14 +42,22 @@ docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens \
   --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
   pixdrop
+
+docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](compose.yaml). Then open
-`http://localhost:8000` and log in with your token.
+or `docker compose up -d` with [`compose.yaml`](compose.yaml), and
+`docker compose exec pixdrop python -m pixdrop adduser alice`. Then open
+`http://localhost:8000` and log in with the token.
 
-`data/users.json` has the users, in the same format as
-[TeXdrop](https://github.com/nikolaos572/texdrop)'s `config.json` (one file can serve
-both). `data/config.json` has the providers, with their keys, and the models: for each one
+Add more users the same way, at any time, without a restart. If a token is lost or leaked,
+`docker exec pixdrop python -m pixdrop reset-token alice` prints a new one, and the old one
+stops working at once, in the browser and in the user's scripts and agents alike. (See
+[the users](docs/CONFIGURATION.md#users), also for removing a user.)
+
+The commands keep the users in `data/users.json`, which can also be edited by hand, in the
+same format as [TeXdrop](https://github.com/nikolaos572/texdrop)'s `config.json` (one file
+can serve both). `data/config.json` has the providers, with their keys, and the models: for each one
 only the provider, its id at OpenRouter and `"api_type": "images"`, since the options come
 from OpenRouter's catalogue. To keep the key out of the file, write
 `"api_key_env": "OPENROUTER_API_KEY"` instead of `"api_key"`, and add
@@ -143,7 +147,7 @@ The administrator can remove old jobs by hand on the server (see
 - [Deployment](docs/DEPLOYMENT.md): requirements, building, running with or without Docker,
   the data directory and the job records, cleaning up, the statistics of all users, reverse
   proxies, container limits, logs.
-- [Configuration](docs/CONFIGURATION.md): the users file, the providers and models, the
+- [Configuration](docs/CONFIGURATION.md): the users, the providers and models, the
   options, the environment variables and their defaults, fixed limits.
 - [API documentation](docs/API.md): every endpoint, its parameters, responses and errors,
   how jobs behave, and examples in the shell and Python.

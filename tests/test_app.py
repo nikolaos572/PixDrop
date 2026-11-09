@@ -86,6 +86,12 @@ def test_without_the_users_file_the_server_starts_and_refuses_everyone(settings,
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/jobs").status_code == 401
     assert f"users file {settings.users_file} not found" in caplog.text
+    assert "no users yet: add one with python -m pixdrop adduser <name>" in caplog.text
+
+
+def test_the_log_asks_for_users_only_when_there_are_none(settings, caplog):
+    create_app(settings)
+    assert "no users yet" not in caplog.text
 
 
 def test_without_the_config_file_the_server_starts_without_models(settings, caplog):

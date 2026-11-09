@@ -1,6 +1,11 @@
-"""Run the server, or show every user's statistics.
+"""Run the server, manage the users, or show every user's statistics.
 
     python -m pixdrop                          the server
+    python -m pixdrop adduser NAME             add a user and print their new token; with
+                                               Docker:
+                                               docker exec pixdrop python -m pixdrop adduser NAME
+    python -m pixdrop reset-token NAME         give a user a new token and print it (the old
+                                               one stops working)
     python -m pixdrop stats [--user NAME] [--json]
                                                statistics of all users (or one), from the
                                                job records in DATA_DIR; with Docker:
@@ -16,11 +21,14 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Callable
+from pathlib import Path
 
 import httpx2
 import uvicorn
 
 from . import __version__, logs
+from .accounts import add_user, reset_token
 from .app import create_app
 from .config import parse_config
 from .discovery import capabilities_of
@@ -40,6 +48,10 @@ SHUTDOWN_SECONDS = 5
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m pixdrop", description="PixDrop: generate images with AI models.")
     commands = parser.add_subparsers(dest="command")
+    add_parser = commands.add_parser("adduser", help="add a user and print their new token")
+    add_parser.add_argument("name", help="the user's name: 1-32 of a-z, 0-9, '_' and '-', starting with a letter or a digit")
+    reset_parser = commands.add_parser("reset-token", help="give a user a new token and print it (the old one stops working)")
+    reset_parser.add_argument("name", help="the user's name")
     stats_parser = commands.add_parser("stats", help="show the statistics of every user (or of one)")
     stats_parser.add_argument("--user", help="only this user, in detail")
     stats_parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
@@ -51,6 +63,10 @@ def main(argv: list[str] | None = None) -> None:
     # without it (as in Docker) rather than in the system's time zone.
     os.environ.setdefault("TZ", "UTC")
     time.tzset()
+    if arguments.command == "adduser":
+        sys.exit(print_new_token(add_user, arguments.name, f"Added user {arguments.name}. Their token:"))
+    if arguments.command == "reset-token":
+        sys.exit(print_new_token(reset_token, arguments.name, f"New token of user {arguments.name} (the old one no longer works):"))
     if arguments.command == "stats":
         sys.exit(show_stats(arguments.user, arguments.json))
     if arguments.command == "models":
@@ -83,6 +99,19 @@ def serve() -> None:
         access_log=False,
         timeout_graceful_shutdown=SHUTDOWN_SECONDS,
     )
+
+
+def print_new_token(change: Callable[[Path, str], str], name: str, done: str) -> int:
+    """Change the users file, and print the new token alone on standard output (for scripts),
+    with `done` on standard error; returns the exit status."""
+    try:
+        token = change(Settings.from_env().users_file, name)
+    except (OSError, ValueError) as exc:  # SettingsError and ConfigError are ValueErrors
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(done, file=sys.stderr)
+    print(token)
+    return 0
 
 
 def show_stats(only: str | None, as_json: bool) -> int:

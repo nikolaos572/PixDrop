@@ -124,8 +124,8 @@ curl "$URL/api/session?token=$TOKEN"
   digits or `._~+/=-`.
 - A missing, malformed or unknown token gets `401 Unauthorized` with the header
   `WWW-Authenticate: Bearer` and `{"detail": "missing or invalid token"}`. The same happens
-  when the administrator removes the token while you use it: the users file is re-read
-  when it changes.
+  when the administrator removes or replaces the token while you use it: the users file is
+  re-read when it changes.
 - Prefer the headers. A token in the URL is for clients that cannot send headers (an image
   URL given to another program, say); URLs are easily kept in the history of browsers and
   shells, and in the logs of proxies. PixDrop's own log never shows tokens (it writes

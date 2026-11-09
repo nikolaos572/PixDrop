@@ -30,8 +30,9 @@ address), `auth`, `storage` (file layout), `store` (job records), `images` (reco
 checking and scaling images), `svgdraw` (draws SVGs in the helper process), `providers`
 (the requests to OpenRouter-compatible APIs), `jobs` (job lifecycle), `worker` (the
 generations), `links` (transfer links), `stats`, `api`, `mcp_server` (the MCP server for AI
-agents, whose tools call `api`'s code), `web`, `logs`, `errors`, `app` (wiring) and
-`__main__` (the server, and the `stats` and `models` commands). The web page is plain HTML, CSS and JavaScript in
+agents, whose tools call `api`'s code), `web`, `logs`, `errors`, `app` (wiring), `accounts`
+(the commands' changes to the users file) and `__main__` (the server, and the `adduser`,
+`reset-token`, `stats` and `models` commands). The web page is plain HTML, CSS and JavaScript in
 `src/pixdrop/static/`, with no build step. What keeps users apart is described in
 [SECURITY.md](SECURITY.md).
 
@@ -50,9 +51,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # needs the cairo li
 .venv/bin/python tests/fake_provider.py --port 9000 &        # fake provider at http://127.0.0.1:9000/api/v1
 
 mkdir -p data
-cat > data/users.json <<'EOF'
-{"users": {"dev": "dev-token-0123456789abcdef"}}
-EOF
+DATA_DIR=data .venv/bin/python -m pixdrop adduser dev        # prints the token to log in with
 cat > data/config.json <<'EOF'
 {
   "providers": {"fake": {"base_url": "http://127.0.0.1:9000/api/v1", "api_key": "anything"}},
@@ -66,7 +65,7 @@ EOF
 DATA_DIR=data .venv/bin/python -m pixdrop
 ```
 
-Then open `http://localhost:8000` and log in with `dev-token-0123456789abcdef`. The models
+Then open `http://localhost:8000` and log in with the token `adduser` printed. The models
 take their options from the fake catalogue (`DATA_DIR=data .venv/bin/python -m pixdrop
 models` lists it). The `data/` directory is ignored by git. Words in a prompt make the fake provider misbehave, to try the
 error paths: `FAIL` (an error status), `FAIL200` (an error in an answer with status `200`),
