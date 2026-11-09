@@ -7,12 +7,17 @@ process and which they reach through the host's gateway.
 
 from __future__ import annotations
 
+import fcntl
 import io
 import json
 import os
+import pty
+import select
 import shutil
 import stat
+import struct
 import subprocess
+import termios
 import threading
 import time
 from pathlib import Path
@@ -358,6 +363,168 @@ def test_a_users_file_mounted_read_only_is_refused(image, data, tmp_path, mode, 
         assert shared.read_bytes() == before
         assert session_of(server, TOKEN) == 200
         assert not list(data.glob(".*.tmp"))
+    finally:
+        server.stop()
+
+
+class Terminal:
+    """A command in a real terminal of 80 by 24, as the administrator runs it."""
+
+    def __init__(self, *command: str) -> None:
+        self.master, slave = pty.openpty()
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        self.process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+        os.close(slave)
+        self.output = ""
+
+    def _read(self, timeout: float) -> bool:
+        ready, _, _ = select.select([self.master], [], [], timeout)
+        if not ready:
+            return False
+        try:
+            chunk = os.read(self.master, 65536)
+        except OSError:  # the command has ended
+            return False
+        self.output += chunk.decode(errors="replace")
+        return bool(chunk)
+
+    def expect(self, text: str, timeout: float = 60) -> None:
+        deadline = time.monotonic() + timeout
+        while text not in self.output:
+            assert self._read(max(0, deadline - time.monotonic())), f"{text!r} did not appear in:\n{self.output[-3000:]}"
+
+    def type(self, keys: str) -> None:
+        os.write(self.master, keys.encode())
+
+    def finish(self) -> int:
+        while self._read(5):
+            pass
+        status = self.process.wait(timeout=60)
+        os.close(self.master)
+        return status
+
+
+@pytest.fixture
+def fake_defaults(image: str, provider_port: int, tmp_path: Path) -> tuple[str, str]:
+    """Options for docker run that replace the default models by the fake provider's, with the
+    image's file of defaults: the real ones need OpenRouter."""
+    defaults = tmp_path / "default_config.json"
+    defaults.write_text(json.dumps({
+        "providers": {"openrouter": {"base_url": f"http://host.docker.internal:{provider_port}/api/v1", "api_key": "<your key>"}},
+        "default_model": "pictures",
+        "models": {
+            "pictures": {"provider": "openrouter", "model": "fake/images", "api_type": "images"},
+            "editor": {"provider": "openrouter", "model": "fake/editor", "api_type": "images"},
+        },
+    }))  # fmt: skip
+    path = docker("run", "--rm", "--entrypoint", "python", image, "-c", "from pixdrop.configure import DEFAULTS; print(DEFAULTS)")
+    return "--volume", f"{defaults}:{path}:ro"
+
+
+def in_terminal(container: str, *arguments: str) -> Terminal:
+    # This terminal cannot answer prompt_toolkit's question about the cursor; a real one does.
+    return Terminal("docker", "exec", "-it", "--env", "PROMPT_TOOLKIT_NO_CPR=1", container, "python", "-m", "pixdrop", *arguments)
+
+
+def test_the_image_has_the_default_models(image):
+    code = "import json; from pixdrop.configure import DEFAULTS; print(json.load(open(DEFAULTS))['default_model'])"
+    assert docker("run", "--rm", "--entrypoint", "python", image, "-c", code) == "sunburst"
+
+
+def test_setup_and_modify_models_in_a_terminal(image, data, fake_defaults):
+    (data / "config.json").unlink()
+    config = data / "config.json"
+    server = Server(image, data, *fake_defaults)
+    try:
+        assert server.client.get("/api/models").json()["models"] == []
+
+        terminal = in_terminal(server.container, "setup")
+        terminal.expect("API key (not shown as you type):")
+        terminal.type("sk-first-key-0123456789\r")
+        terminal.expect("To add or remove models")
+        assert terminal.finish() == 0
+        assert "sk-first-key" not in terminal.output
+        assert "with 2 models" in terminal.output and "reference images 0-4; options: aspect_ratio, quality" in terminal.output
+        written = config.stat()
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+
+        # The server follows, without a restart: the models at once, and their options from the catalogue.
+        assert server.generate("a first picture")["status"] == "completed"
+        deadline = time.monotonic() + 45
+        while (models := server.client.get("/api/models").json())["models"][0]["options_from"] != "provider":
+            assert time.monotonic() < deadline
+            time.sleep(0.5)
+        assert [model["name"] for model in models["models"]] == ["pictures", "editor"]
+        assert models["default_model"] == "pictures"
+
+        terminal = in_terminal(server.container, "modify-models")
+        terminal.expect("Models to offer:")
+        terminal.expect("fake/chat")
+        terminal.type("chat")
+        terminal.expect("chat")
+        time.sleep(0.5)
+        terminal.type(" ")
+        time.sleep(0.5)
+        terminal.type("\x7f" * 4 + "\r")
+        terminal.expect("Default model:")
+        terminal.type("\r")
+        terminal.expect("Added chat:")
+        assert terminal.finish() == 0
+        assert [model["name"] for model in server.client.get("/api/models").json()["models"]] == ["pictures", "editor", "chat"]
+        assert stat.S_IMODE(config.stat().st_mode) == 0o600
+        assert server.generate("a second picture", model="chat")["status"] == "completed"
+
+        cancelled = in_terminal(server.container, "modify-models")
+        cancelled.expect("Models to offer:")
+        cancelled.expect("fake/chat")
+        before = config.read_bytes() if os.access(config, os.R_OK) else None
+        cancelled.type("\x03")
+        assert cancelled.finish() == 1
+        assert "Cancelled: nothing changed." in cancelled.output
+        assert before is None or config.read_bytes() == before
+
+        terminal = in_terminal(server.container, "setup")
+        terminal.expect("its API key and its models will be deleted")
+        terminal.expect("API key (not shown as you type):")
+        terminal.type("sk-second-key-0123456789\r")
+        terminal.expect("To add or remove models")
+        assert terminal.finish() == 0
+        assert [model["name"] for model in server.client.get("/api/models").json()["models"]] == ["pictures", "editor"]
+        key = docker("exec", server.container, "python", "-c", "import json; print(json.load(open('/data/config.json'))['providers']['openrouter']['api_key'])")
+        assert key == "sk-second-key-0123456789"
+    finally:
+        server.stop()
+    restarted = Server(image, data, *fake_defaults)  # the server can read what the commands wrote
+    try:
+        assert [model["name"] for model in restarted.client.get("/api/models").json()["models"]] == ["pictures", "editor"]
+    finally:
+        restarted.stop()
+
+
+def test_setup_refuses_a_key_the_provider_refuses(image, data, fake_defaults):
+    (data / "config.json").unlink()
+    server = Server(image, data, *fake_defaults)
+    try:
+        command = ["docker", "exec", "-i", server.container, "python", "-m", "pixdrop", "setup"]
+        refused = subprocess.run(command, input="rejected-key\n", capture_output=True, text=True, check=False)
+        assert refused.returncode == 1 and "openrouter refused this API key" in refused.stderr
+        assert not (data / "config.json").exists()
+        piped = subprocess.run(command, input="sk-a-piped-key-0123456789\n", capture_output=True, text=True, check=False)
+        assert piped.returncode == 0, piped.stderr
+        assert (data / "config.json").exists()
+    finally:
+        server.stop()
+
+
+def test_the_commands_explain_what_they_need_without_a_terminal(image, data):
+    server = Server(image, data)
+    try:
+        before = (data / "config.json").read_bytes()
+        modify = manage(server.container, "modify-models")
+        assert (modify.returncode, modify.stderr) == (1, "error: this command needs a terminal: run it with docker exec -it\n")
+        setup = manage(server.container, "setup")
+        assert setup.returncode == 1 and "no API key given" in setup.stderr and "Traceback" not in setup.stderr
+        assert (data / "config.json").read_bytes() == before
     finally:
         server.stop()
 

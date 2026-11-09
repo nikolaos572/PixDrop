@@ -90,10 +90,37 @@ def _range(described: Mapping[str, Any]) -> tuple[int | None, int | None]:
 
 def parse_catalog(document: object) -> dict[str, Capabilities]:
     """The capabilities of every model of a catalogue, by model id."""
+    return {entry["id"]: capabilities_of(entry) for entry in _entries(document)}
+
+
+def _entries(document: object) -> list[dict[str, Any]]:
     entries = document.get("data") if isinstance(document, dict) else None
     if not isinstance(entries, list):
         raise ValueError("the catalogue has no data list")
-    return {entry["id"]: capabilities_of(entry) for entry in entries if isinstance(entry, dict) and isinstance(entry.get("id"), str)}
+    return [entry for entry in entries if isinstance(entry, dict) and isinstance(entry.get("id"), str)]
+
+
+def auth_headers(provider: Provider) -> dict[str, str]:
+    return {**provider.headers, "Authorization": f"Bearer {provider.api_key}"}
+
+
+def read_entries(provider: Provider) -> list[dict[str, Any]]:
+    """The entries of a provider's catalogue now, for the administrator's commands.
+    Raises httpx2.HTTPError or ValueError if it cannot be read."""
+    response = httpx2.get(f"{provider.base_url}/images/models", headers=auth_headers(provider), timeout=30)
+    response.raise_for_status()
+    return _entries(response.json())
+
+
+def references_of(capabilities: Capabilities) -> str:
+    """How many reference images a model takes, for people."""
+    return f"{capabilities.min_references}-{capabilities.max_references}" if capabilities.max_references else "none"
+
+
+def summary_of(entry: Mapping[str, Any]) -> str:
+    """What the model of a catalogue's entry accepts, in a line for people."""
+    capabilities = capabilities_of(entry)
+    return f"reference images {references_of(capabilities)}; options: {', '.join(capabilities.specs) or '-'}"
 
 
 class Catalogs:
@@ -143,8 +170,7 @@ class Catalogs:
             self._report(provider, catalog, [model for model in relying if _key(model.provider) == key])
 
     async def _read(self, provider: Provider) -> dict[str, Capabilities]:
-        headers = {**provider.headers, "Authorization": f"Bearer {provider.api_key}"}
-        response = await self._http.get(f"{provider.base_url}/images/models", headers=headers, timeout=30)
+        response = await self._http.get(f"{provider.base_url}/images/models", headers=auth_headers(provider), timeout=30)
         if response.status_code != 200:
             raise ValueError(f"HTTP {response.status_code}")
         try:

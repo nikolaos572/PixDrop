@@ -35,7 +35,6 @@ through its MCP server and by programs through its HTTP API, and also has a web 
 docker build -t pixdrop .
 
 mkdir data
-cp config.example.json data/config.json      # then put your OpenRouter key in it, and choose the models
 sudo chown -R 1001:1001 data                 # the container runs as uid 1001
 
 docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
@@ -43,12 +42,25 @@ docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
   --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
   pixdrop
 
+docker exec -it pixdrop python -m pixdrop setup        # asks for your OpenRouter key, adds the default models
 docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](compose.yaml), and
-`docker compose exec pixdrop python -m pixdrop adduser alice`. Then open
+or `docker compose up -d` with [`compose.yaml`](compose.yaml), and the same two commands
+with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Then open
 `http://localhost:8000` and log in with the token.
+
+`setup` checks your key and that OpenRouter still offers each default model, and only then
+writes `data/config.json`: if anything is wrong it writes nothing. To choose other models:
+
+```bash
+docker exec -it pixdrop python -m pixdrop modify-models
+```
+
+shows a checklist of the models OpenRouter offers now, where space ticks a model and typing
+searches. Each model's options come from OpenRouter's catalogue and stay up to date by
+themselves. Running `setup` again replaces the key and all the models with the defaults: use
+it to change the key, or to start over.
 
 Add more users the same way, at any time, without a restart. If a token is lost or leaked,
 `docker exec pixdrop python -m pixdrop reset-token alice` prints a new one, and the old one
@@ -57,14 +69,13 @@ stops working at once, in the browser and in the user's scripts and agents alike
 
 The commands keep the users in `data/users.json`, which can also be edited by hand, in the
 same format as [TeXdrop](https://github.com/nikolaos572/texdrop)'s `config.json` (one file
-can serve both). `data/config.json` has the providers, with their keys, and the models: for each one
-only the provider, its id at OpenRouter and `"api_type": "images"`, since the options come
-from OpenRouter's catalogue. To keep the key out of the file, write
-`"api_key_env": "OPENROUTER_API_KEY"` instead of `"api_key"`, and add
-`-e OPENROUTER_API_KEY=sk-or-v1-...` to the `docker run` command. To find models,
-`docker exec pixdrop python -m pixdrop models` lists OpenRouter's image models, and
-`docker exec pixdrop python -m pixdrop models qwen` those matching `qwen` in detail, with a
-line to copy into `config.json` (see [CONFIGURATION.md](docs/CONFIGURATION.md)).
+can serve both). `data/config.json` has the providers, with their keys, and the models: for
+each one only the provider, its id at OpenRouter and `"api_type": "images"`. It can be edited
+by hand too: to keep the key out of the file, write `"api_key_env": "OPENROUTER_API_KEY"`
+instead of `"api_key"`, and add `-e OPENROUTER_API_KEY=sk-or-v1-...` to the `docker run`
+command. To look at models, `docker exec pixdrop python -m pixdrop models` lists OpenRouter's
+image models, and `docker exec pixdrop python -m pixdrop models qwen` those matching `qwen`
+in detail (see [CONFIGURATION.md](docs/CONFIGURATION.md)).
 
 Everything the service stores lives in the mounted directory, so the container can be
 removed or upgraded without losing data. The service also runs without Docker.

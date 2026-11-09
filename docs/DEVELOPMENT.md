@@ -31,8 +31,9 @@ checking and scaling images), `svgdraw` (draws SVGs in the helper process), `pro
 (the requests to OpenRouter-compatible APIs), `jobs` (job lifecycle), `worker` (the
 generations), `links` (transfer links), `stats`, `api`, `mcp_server` (the MCP server for AI
 agents, whose tools call `api`'s code), `web`, `logs`, `errors`, `app` (wiring), `accounts`
-(the commands' changes to the users file) and `__main__` (the server, and the `adduser`,
-`reset-token`, `stats` and `models` commands). The web page is plain HTML, CSS and JavaScript in
+(the commands' changes to the users file), `configure` (those to `config.json`, with
+`default_config.json`, the default models) and `__main__` (the server, and the `setup`,
+`modify-models`, `adduser`, `reset-token`, `stats` and `models` commands). The web page is plain HTML, CSS and JavaScript in
 `src/pixdrop/static/`, with no build step. What keeps users apart is described in
 [SECURITY.md](SECURITY.md).
 
@@ -43,8 +44,9 @@ picture drawn from the prompt (a colour of its own and the prompt's first words)
 cost and without a key, and lists three models in its catalogue (`GET
 /api/v1/images/models`): `fake/images` (most options, up to 4 reference images, and a
 parameter PixDrop does not know), `fake/chat` (a model of chat completions) and
-`fake/editor` (it only edits: 1 or 2 reference images). Start it, and point a provider at
-it:
+`fake/editor` (it only edits: 1 or 2 reference images). `GET /api/v1/key` accepts any key
+but `rejected-key`. Start it, and point a provider at it by hand, since `setup` writes
+OpenRouter's address and models:
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # needs the cairo library (Debian: libcairo2)

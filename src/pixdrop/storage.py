@@ -16,15 +16,19 @@ A job id is the UTC time of the request in milliseconds and 4 random hex digits,
 
 from __future__ import annotations
 
+import errno
+import fcntl
 import json
 import os
 import re
 import secrets
 import shutil
+import stat
+import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterator
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +36,7 @@ from .users import NAME_PATTERN
 
 ID_PATTERN = re.compile(r"\d{13}_[0-9a-f]{4}")
 REFERENCE_SUFFIX = "_reference"
+PRIVATE_MODE = 0o600  # of a new file with secrets
 
 
 class Storage:
@@ -133,6 +138,55 @@ def write_file(path: Path, content: bytes) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def locked_file(path: Path) -> Iterator[Path]:
+    """Let the administrator's commands on a file take turns, so that none undoes another's
+    change. Gives the file's real path: a link stays a link, and what it points to changes.
+    The lock is on the directory because the file itself gets replaced."""
+    path = path.resolve()
+    descriptor = os.open(path.parent, os.O_RDONLY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield path
+    finally:
+        os.close(descriptor)  # releases the lock
+
+
+def write_secret_json(path: Path, value: dict[str, Any], *, fresh: bool = False) -> None:
+    """Replace a file with secrets (users.json, config.json) atomically, so that the server never
+    reads a part of it. The new file keeps the owner and mode of the old one. Without one, or
+    when `fresh`, it is private to the directory's owner, so that the server can still read
+    it when root runs the command."""
+    current = None
+    if not fresh:
+        with suppress(FileNotFoundError):
+            current = path.stat()
+    owner = current or path.parent.stat()
+    mode = stat.S_IMODE(current.st_mode) if current else PRIVATE_MODE
+    descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")  # private
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            with suppress(OSError):  # only root can give a file to another user
+                os.fchown(file.fileno(), owner.st_uid, owner.st_gid)
+            os.fchmod(file.fileno(), mode)
+            dump_json(value, file)
+        try:
+            os.replace(temporary, path)
+        except OSError as exc:
+            if exc.errno != errno.EBUSY:
+                raise
+            _write_over(path, value)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _write_over(path: Path, value: dict[str, Any]) -> None:
+    """Write over a file Docker mounted by itself, which cannot be replaced."""
+    with path.open("r+", encoding="utf-8") as file:
+        dump_json(value, file)
+        file.truncate()
 
 
 def dump_json(value: dict[str, Any], file: Any) -> None:

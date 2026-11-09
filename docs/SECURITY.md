@@ -53,10 +53,12 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   leaked token cannot destroy a user's history (it can read it, and generate images).
 - **Provider keys** are only in `config.json`, or in an environment variable it names
   (`api_key_env`), and must be plain ASCII (a key that is not is refused, without showing it
-  in the error). They are sent only to the provider's `base_url`: with each generation,
-  and with the server's reads of the provider's model catalogue (`GET
+  in the error). `python -m pixdrop setup` asks for the key without showing it, keeps it out
+  of the command line, and writes a file only its owner can read. Keys are sent only to the
+  provider's `base_url`: with each generation, with `setup`'s check of the key (`GET
+  {base_url}/key`), and with the server's reads of the provider's model catalogue (`GET
   {base_url}/images/models`, at startup and every 6 hours, which the `python -m pixdrop
-  models` command makes too), with the same trust as generating. They are never sent to
+  models`, `setup` and `modify-models` commands make too), with the same trust as generating. They are never sent to
   clients (the API and the MCP server show the provider's name only), never with the
   download of an image a provider links to, and never logged. A catalogue only decides
   which of the options PixDrop knows a model offers, with which values (which are then
