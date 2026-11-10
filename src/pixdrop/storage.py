@@ -2,6 +2,7 @@
 
     <data>/config.json                                 providers and models (CONFIG_FILE)
     <data>/users.json                                  users and tokens (USERS_FILE)
+    <data>/sessions.json                               the web page's sessions (sessions.py)
     <data>/outputs/<user>/<id>.json                    a job: its request, status and results
     <data>/outputs/<user>/<id>.png                     its image (the extension follows the format)
     <data>/outputs/<user>/<id>_2.png                   further images, when a model returns several
@@ -44,6 +45,7 @@ class Storage:
         self.root = root
         self.outputs_dir = root / "outputs"
         self.tmp_dir = root / "tmp"
+        self.sessions_file = root / "sessions.json"
 
     def prepare(self) -> None:
         """Create the layout and discard the uploads an interrupted run left behind."""
@@ -155,10 +157,10 @@ def locked_file(path: Path) -> Iterator[Path]:
 
 
 def write_secret_json(path: Path, value: dict[str, Any], *, fresh: bool = False) -> None:
-    """Replace a file with secrets (users.json, config.json) atomically, so that the server never
-    reads a part of it. The new file keeps the owner and mode of the old one. Without one, or
-    when `fresh`, it is private to the directory's owner, so that the server can still read
-    it when root runs the command."""
+    """Replace a file with secrets (users.json, config.json, sessions.json) atomically, so that
+    the server never reads a part of it. The new file keeps the owner and mode of the old one.
+    Without one, or when `fresh`, it is private to the directory's owner, so that the server
+    can still read it when root runs the command."""
     current = None
     if not fresh:
         with suppress(FileNotFoundError):

@@ -6,9 +6,10 @@ The token is taken from the first of these places that the request uses:
 2. `X-API-Key: <token>`,
 3. `?token=<token>` in the URL (an MCP client configured with `https://.../mcp?token=...`,
    or a link to an image),
-4. the web page's cookie, set by logging in (web.py). Requests authenticated by the cookie
-   must carry an `X-Requested-With` header when they change something: another site
-   cannot add it without a CORS preflight, which this server never approves.
+4. the web page's cookie, set by logging in (web.py), which holds a session (sessions.py)
+   rather than the token. Requests authenticated by the cookie must carry an
+   `X-Requested-With` header when they change something: another site cannot add it
+   without a CORS preflight, which this server never approves.
 
 The MCP endpoint, which no web page calls, accepts the first three only.
 """
@@ -18,10 +19,11 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader, APIKeyQuery, HTTPAuthorizationCredentials, HTTPBearer
 
+from .sessions import Sessions
 from .users import UserRegistry
 
-COOKIE_NAME = "pixdrop_token"
-COOKIE_MAX_AGE = 30 * 86_400  # seconds
+COOKIE_NAME = "pixdrop_session"
+COOKIE_MAX_AGE = 30 * 86_400  # seconds, also the session's lifetime
 CSRF_HEADER = "X-Requested-With"
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
@@ -54,14 +56,18 @@ async def agent_user(request: Request) -> str:
 
 
 def _user(request: Request, explicit: str | None, *, cookie: bool) -> str:
-    token = explicit
-    if token is None and cookie:
-        token = request.cookies.get(COOKIE_NAME, "")
-        if token:
-            if request.method not in _SAFE_METHODS and CSRF_HEADER not in request.headers:
-                raise HTTPException(status.HTTP_403_FORBIDDEN, f"cookie-authenticated requests need a {CSRF_HEADER} header")
-            request.state.via_cookie = True  # the web page: jobs it creates are marked "web"
-    return _authenticated(request, token or "")
+    if explicit is None and cookie and (session_id := request.cookies.get(COOKIE_NAME, "")):
+        if request.method not in _SAFE_METHODS and CSRF_HEADER not in request.headers:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"cookie-authenticated requests need a {CSRF_HEADER} header")
+        user = sessions(request).user(session_id)
+        if user is None:
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED, "the session ended or expired: log in again", headers={"WWW-Authenticate": "Bearer"}
+            )
+        request.state.user = user  # for the access log
+        request.state.via_cookie = True  # the web page: jobs it creates are marked "web"
+        return user
+    return _authenticated(request, explicit or "")
 
 
 def _explicit_token(bearer: HTTPAuthorizationCredentials | None, api_key: str | None, query: str | None) -> str | None:
@@ -82,3 +88,7 @@ def _authenticated(request: Request, token: str) -> str:
 
 def registry(request: Request) -> UserRegistry:
     return request.app.state.users
+
+
+def sessions(request: Request) -> Sessions:
+    return request.app.state.sessions

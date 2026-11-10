@@ -26,16 +26,16 @@ The code is in `src/pixdrop/`, one module per concern, each starting with a docs
 says what it does: `settings`, `users` (tokens), `watched` (the configuration files,
 re-read when they change), `config` (providers, models and the options), `discovery`
 (the providers' model catalogues, which give the models' options), `client` (the client's
-address), `auth`, `storage` (file layout), `store` (job records), `images` (recognising,
-checking and scaling images), `svgdraw` (draws SVGs in the helper process), `providers`
-(the requests to OpenRouter-compatible APIs), `jobs` (job lifecycle), `worker` (the
-generations), `links` (transfer links), `stats`, `api`, `mcp_server` (the MCP server for AI
-agents, whose tools call `api`'s code), `web`, `logs`, `errors`, `app` (wiring), `accounts`
-(the commands' changes to the users file), `configure` (those to `config.json`, with
-`default_config.json`, the default models) and `__main__` (the server, and the `setup`,
-`modify-models`, `adduser`, `reset-token`, `stats` and `models` commands). The web page is plain HTML, CSS and JavaScript in
-`src/pixdrop/static/`, with no build step. What keeps users apart is described in
-[SECURITY.md](SECURITY.md).
+address), `auth`, `sessions` (the web page's logins), `storage` (file layout), `store` (job
+records), `images` (recognising, checking and scaling images), `svgdraw` (draws SVGs in the
+helper process), `providers` (the requests to OpenRouter-compatible APIs), `jobs` (job
+lifecycle), `worker` (the generations), `links` (transfer links), `stats`, `api`,
+`mcp_server` (the MCP server for AI agents, whose tools call `api`'s code), `web`, `logs`,
+`errors`, `app` (wiring), `accounts` (the commands' changes to the users file), `configure`
+(those to `config.json`, with `default_config.json`, the default models) and `__main__` (the
+server, and the `setup`, `modify-models`, `adduser`, `reset-token`, `stats` and `models`
+commands). The web page is plain HTML, CSS and JavaScript in `src/pixdrop/static/`, with no
+build step. What keeps users apart is described in [SECURITY.md](SECURITY.md).
 
 ## Running it locally
 

@@ -9,16 +9,21 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
 
 - **Tokens.** Every request to the API but the health check and logging out needs a token
   (or, for a transfer link, its secret), compared in constant time with every known
-  token. A token is accepted in the `Authorization` or `X-API-Key` header, in the URL
-  (`?token=`), or in the web page's cookie; the first of these that a request
+  token. A token is accepted in the `Authorization` or `X-API-Key` header, or in the URL
+  (`?token=`), and the web page's session in its cookie; the first of these that a request
   has decides. The users file is re-read when it changes, so a removed or replaced token
   stops working at once. `python -m pixdrop adduser` and `reset-token` make random 256-bit
   tokens. The file holds the tokens as they are, so `adduser` creates it readable only by its
   owner; keep it that way.
-- **The web page's cookie** is `HttpOnly` (scripts cannot read it), `SameSite=Strict`, and
-  `Secure` over HTTPS. Changes made with it require an `X-Requested-With` header, which
-  other sites cannot send without the server's consent, and the server gives none (no
-  CORS). The MCP server does not accept the cookie at all.
+- **The web page's cookie** holds a session, not the token: a random 256-bit id, which the
+  server keeps in `sessions.json` only as its SHA-256, with that of the token it was started
+  with. **Logging out ends the session on the server**, so the cookie stops working
+  everywhere, also a copy of it taken before. A session also ends after 30 days, and as soon
+  as its user is removed or given a new token (`reset-token` logs every browser of the user
+  out). The cookie is `HttpOnly` (scripts cannot read it), `SameSite=Strict`, and `Secure`
+  over HTTPS. Changes made with it require an `X-Requested-With` header, which other sites
+  cannot send without the server's consent, and the server gives none (no CORS). The MCP
+  server does not accept the cookie at all.
 - **Pages** are served with a strict Content Security Policy (scripts, styles and images
   only from the server itself, no plugins, not shown in frames of other sites) and are never
   cached. Every response carries
@@ -104,8 +109,8 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   old jobs by hand (see [Cleaning up](DEPLOYMENT.md#cleaning-up)).
 - **Tokens in URLs.** A token given as `?token=` is kept wherever the URL is: the history
   of browsers and shells, an agent's configuration, the log of a proxy. Prefer the headers.
-- **The cookie holds the token itself** for 30 days. Logging out deletes it from the
-  browser, but the token stays valid until the administrator changes it.
+- **A leaked token** stays valid until the administrator gives its user a new one
+  (`reset-token`): logging out of the web page ends that browser's session, not the token.
 - **What the providers see.** Prompts and reference images go to the provider (and, through
   OpenRouter, to the company that runs the model), under its terms. PixDrop does not filter
   prompts or images; moderation is the provider's.

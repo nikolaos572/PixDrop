@@ -13,6 +13,7 @@ when it changes, so users can be added or removed without a restart.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import secrets
 from pathlib import Path
@@ -22,6 +23,11 @@ from .watched import WatchedJsonFile
 
 NAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~+/=-]{16,256}")  # safe in headers, cookies and URLs
+
+
+def digest(secret: str) -> str:
+    """The SHA-256 of a token or another secret, in hexadecimal: what is kept instead of it."""
+    return hashlib.sha256(secret.encode()).hexdigest()
 
 
 def parse_users(raw: object) -> dict[str, str]:
@@ -56,6 +62,12 @@ class UserRegistry:
             if secrets.compare_digest(known.encode(), candidate):
                 user = name
         return user
+
+    def has_token(self, user: str, token_digest: str) -> bool:
+        """Whether `user` still has the token with this digest (the token of a session)."""
+        return any(
+            name == user and secrets.compare_digest(digest(token), token_digest) for token, name in self._file.current().items()
+        )
 
     def exists(self, user: str) -> bool:
         """Whether `user` is (still) in the file."""

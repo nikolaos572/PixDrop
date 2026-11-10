@@ -111,6 +111,7 @@ them.
 data/
 ├── config.json                            providers and models (python -m pixdrop setup creates this)
 ├── users.json                             users and tokens (python -m pixdrop adduser creates this)
+├── sessions.json                          the web page's sessions, as SHA-256 digests (the server writes this)
 ├── outputs/<user>/<id>.json               a job's record: its request, status and results
 ├── outputs/<user>/<id>.png                its image (.png, .jpg, .webp, .gif or .svg, after the format)
 ├── outputs/<user>/<id>_2.png              its further images, when it has several (_2, _3, ...)

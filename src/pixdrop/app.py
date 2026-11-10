@@ -25,6 +25,7 @@ from .jobs import JobService
 from .links import REFUSAL, LinkRefused, LinkService
 from .mcp_server import McpEndpoint
 from .providers import ProviderClient
+from .sessions import Sessions
 from .settings import Settings
 from .storage import Storage
 from .store import JobStore
@@ -50,6 +51,7 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     users = UserRegistry(settings.users_file)
     if not users.names():
         log.warning("no users yet: add one with python -m pixdrop adduser <name>")
+    sessions = Sessions(storage.sessions_file, users, auth.COOKIE_MAX_AGE)
     models = ModelRegistry(settings.config_file)
     service = JobService(
         store, storage, models, max_active_jobs=settings.max_active_jobs, pending_seconds=settings.link_expiry_seconds
@@ -91,6 +93,7 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     app.state.settings = settings
     app.state.storage = storage
     app.state.users = users
+    app.state.sessions = sessions
     app.state.models = models
     app.state.service = service
     if mcp is not None:

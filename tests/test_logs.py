@@ -5,7 +5,7 @@ import logging
 import re
 
 import pytest
-from helpers import TOKENS, access_lines, generate, png, reference, share, submit
+from helpers import TOKENS, access_lines, browser_of, generate, png, reference, share, submit
 
 from pixdrop import logs
 from pixdrop.links import Target
@@ -41,7 +41,7 @@ def test_one_line_per_change_or_download(client, anonymous, app, caplog):
         "testclient alice GET /api/links/*** 200 N ms",
         "testclient alice POST /api/jobs 201 N ms",
         "testclient bob POST /api/session 200 N ms",
-        "testclient - DELETE /api/session 204 N ms",
+        "testclient bob DELETE /api/session 204 N ms",  # the session it ended
     ]
 
 
@@ -49,8 +49,8 @@ def test_failed_requests_say_why(client, anonymous, caplog):
     done = generate(client)
     for _ in range(4):
         submit(client, reference_count=1)
+    browser = browser_of(client)
     caplog.set_level(logging.INFO)
-    browser = share(client, cookies={"pixdrop_token": TOKENS["alice"]})
     requests = [
         (anonymous.post("/api/session", json={"token": "wrong-token-0123456789"}), 401),
         (anonymous.get("/api/jobs"), 401),

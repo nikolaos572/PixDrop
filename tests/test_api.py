@@ -12,6 +12,7 @@ from helpers import (
     RECORD_FIELDS,
     TOKENS,
     add_job,
+    browser_of,
     config_with,
     generate,
     gif,
@@ -561,7 +562,7 @@ def test_the_source_of_each_job(client, data_dir):
     by_header = submit(client).json()
     by_api_key = share(client, headers={"X-API-Key": TOKENS["alice"]}).post("/api/jobs", data={"prompt": "x"}).json()
     by_query = share(client).post("/api/jobs", params={"token": TOKENS["alice"]}, data={"prompt": "x"}).json()
-    browser = share(client, cookies={"pixdrop_token": TOKENS["alice"]}, headers={"X-Requested-With": "fetch"})
+    browser = browser_of(client, headers={"X-Requested-With": "fetch"})
     by_cookie = browser.post("/api/jobs", data={"prompt": "x"}).json()
     assert [job["source"] for job in (by_header, by_api_key, by_query, by_cookie)] == ["api", "api", "api", "web"]
     assert record_of(data_dir, "alice", by_cookie["id"])["source"] == "web"

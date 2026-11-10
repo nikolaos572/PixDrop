@@ -237,6 +237,18 @@ def share(running: TestClient, **options: Any) -> TestClient:
     return other
 
 
+def login(running: TestClient, user: str = "alice") -> str:
+    """Log a browser in as `user`, as the web page does: the value of its session cookie."""
+    response = share(running).post("/api/session", json={"token": TOKENS[user]})
+    assert response.status_code == 200, response.text
+    return response.cookies["pixdrop_session"]
+
+
+def browser_of(running: TestClient, user: str = "alice", **options: Any) -> TestClient:
+    """Another client of the app that `running` runs, logged in as `user` through the web page."""
+    return share(running, cookies={"pixdrop_session": login(running, user)}, **options)
+
+
 def routes_of(routes: Iterable[Any], prefix: str = "") -> Iterable[tuple[str, set[str]]]:
     """(path, methods) of every route, also those of the routers included in the app."""
     for route in routes:
