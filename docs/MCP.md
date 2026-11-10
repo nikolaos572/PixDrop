@@ -318,6 +318,11 @@ an IPv6) address, or by connecting the agent to the same address `curl` uses.
 `?token=`) in the agent's configuration, and that the variable it reads (`PIXDROP_TOKEN`)
 is set where the agent starts.
 
+**Tool calls are refused with `403`** (*the request came from a page at ...*). The MCP
+client runs in a web page, such as a browser-based inspector, and its browser sends that
+page's address in an `Origin` header: PixDrop refuses changes from pages of other sites (see
+[Security](SECURITY.md)). Use a client that runs outside the browser, as agents do.
+
 ## Security
 
 - **Off unless turned on.** Without `ENABLE_MCP=1`, neither `/mcp` nor `/api/links/` exists.
