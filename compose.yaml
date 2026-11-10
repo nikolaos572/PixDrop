@@ -18,7 +18,7 @@ services:
       MAX_UPLOAD_MB: "20"              # largest reference image
       MAX_ACTIVE_JOBS: "4"             # per user, jobs waiting or generating at the same time
       ENABLE_MCP: "0"                  # 1 serves the MCP server for AI agents at /mcp (docs/MCP.md)
-      FORWARDED_ALLOW_IPS: "*"         # reverse proxies trusted for X-Forwarded-* (docs/DEPLOYMENT.md)
+      FORWARDED_ALLOW_IPS: ""          # your reverse proxy's address, e.g. 172.17.0.1, to log visitors' addresses (docs/DEPLOYMENT.md)
     cap_drop:
       - ALL
     security_opt:

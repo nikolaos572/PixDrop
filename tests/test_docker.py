@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import fcntl
 import io
+import ipaddress
 import json
 import os
 import pty
+import re
+import secrets
 import select
 import shutil
 import stat
@@ -197,13 +200,13 @@ def test_web_ui_and_auth(server):
 def test_generates_from_references_and_serves_both_sizes(server, data):
     files = [("reference", ("front.png", png(), "image/png")), ("reference", ("logo.svg", SVG, "image/svg+xml"))]
     response = server.client.post(
-        "/api/jobs", params={"wait": 60}, headers={"X-Forwarded-For": "198.51.100.7"},
+        "/api/jobs", params={"wait": 60},
         data={"prompt": "the back of this sprite", "model": "fake-chat", "aspect_ratio": "1:1"}, files=files,
     )  # fmt: skip
     assert response.status_code == 201, response.text
     job = response.json()
     assert job["status"] == "completed", job
-    assert job["client_ip"] == "198.51.100.7"
+    assert ipaddress.ip_address(job["client_ip"])
     assert job["created_at"][-6:] in ("+02:00", "+03:00")  # TZ=Europe/Athens
     assert [reference["filename"] for reference in job["references"]] == ["1_front.png", "2_logo.svg"]
     full = server.client.get(f"/api/jobs/{job['id']}/images/1")
@@ -217,6 +220,37 @@ def test_generates_from_references_and_serves_both_sizes(server, data):
     assert record["status"] == "completed" and record["images"][0]["filename"] == f"{job['id']}.png"
     assert (user_dir / f"{job['id']}.png").stat().st_uid == 61001
     assert sorted(path.name for path in (user_dir / f"{job['id']}_reference").iterdir()) == ["1_front.png", "2_logo.svg"]
+
+
+def logged_client(server: Server, forwarded_for: str) -> str:
+    """Send a request that says it comes through a proxy for this address; return the client's
+    address that the server's log shows for it (a refused request is logged)."""
+    marker = secrets.token_hex(8)
+    httpx2.get(f"{server.url}/api/jobs", params={"probe": marker}, headers={"X-Forwarded-For": forwarded_for})
+    pattern = re.compile(rf"INFO    (\S+) - GET /api/jobs\?probe={marker} 401 ")
+    deadline = time.monotonic() + 10
+    while not (match := pattern.search(subprocess.run(["docker", "logs", server.container], capture_output=True, text=True).stderr)):
+        assert time.monotonic() < deadline, f"no log line for the request {marker}"
+        time.sleep(0.2)
+    return match.group(1)
+
+
+def test_x_forwarded_for_counts_only_from_a_trusted_proxy(image, data):
+    # By default no proxy is trusted, so a client cannot put any address it likes in the log.
+    server = Server(image, data)
+    try:
+        peer = logged_client(server, "203.0.113.7")
+        assert peer != "203.0.113.7"
+    finally:
+        server.stop()
+    # Trusting exactly that peer, as the docs say to find it, the log shows the visitor's address.
+    server = Server(image, data, "--env", f"FORWARDED_ALLOW_IPS={peer}")
+    try:
+        assert logged_client(server, "203.0.113.7") == "203.0.113.7"
+        job = server.client.post("/api/jobs", headers={"X-Forwarded-For": "203.0.113.7"}, data={"prompt": "a fox", "reference_count": "1"})
+        assert job.json()["client_ip"] == "203.0.113.7"
+    finally:
+        server.stop()
 
 
 def test_jobs_survive_a_new_container(image, data):

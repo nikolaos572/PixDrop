@@ -88,16 +88,14 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
 - **Plain HTTP.** Without HTTPS, the tokens, the cookie, the transfer links, the prompts and
   the images can be read by anyone who can see the network's traffic. Put a reverse proxy
   with a certificate in front of the service when it is reachable beyond a trusted network.
-- **Client addresses from headers.** With `FORWARDED_ALLOW_IPS=*` (the default), PixDrop
-  takes the client's address from the first address of `X-Forwarded-For`, else
-  `CF-Connecting-IP`, else the connection. Anyone who can reach PixDrop's port without the
-  proxy can then claim any address: in the job records, in the log, and for the transfer
-  links, which are bound to an address. The same holds behind a proxy that adds to the
-  client's own `X-Forwarded-For` instead of replacing it, Cloudflare among them. Publish
-  the port only to a proxy that sets `X-Forwarded-For` (`-p 127.0.0.1:8000:8000`, and
-  `proxy_set_header X-Forwarded-For $remote_addr;` for nginx), or name the proxies in
-  `FORWARDED_ALLOW_IPS`, which makes PixDrop ignore the headers of everyone else; see
-  [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
+- **Client addresses from headers.** A proxy named in `FORWARDED_ALLOW_IPS` can put any
+  address it likes in `X-Forwarded-For`: in the job records, in the log, and for the transfer
+  links, which are bound to an address. So name only your proxy there (by default only
+  `127.0.0.1` is trusted). With `FORWARDED_ALLOW_IPS=*`, PixDrop takes the client's address
+  from the first address of `X-Forwarded-For`, else `CF-Connecting-IP`, else the connection,
+  and anyone who can reach PixDrop's port without the proxy can claim any address; so can
+  anyone behind a proxy that adds to the client's own `X-Forwarded-For` instead of replacing
+  it, Cloudflare among them. See [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
 - **Spending.** Anyone with a token can generate images at the provider's expense, as many
   as they like. `MAX_ACTIVE_JOBS` limits how many generations a user runs at the same time,
   not how much they cost. Give tokens only to people you trust with your credits, set a
@@ -148,10 +146,10 @@ These are vulnerabilities:
 
 These are not:
 
-- With `FORWARDED_ALLOW_IPS=*`, addresses claimed in `CF-Connecting-IP` or
-  `X-Forwarded-For` when PixDrop's port can be reached without the proxy, or behind a proxy
-  that keeps the client's own `X-Forwarded-For`: see
-  [What is not protected](#what-is-not-protected).
+- Addresses claimed in `X-Forwarded-For` by a peer that `FORWARDED_ALLOW_IPS` trusts, and
+  with `FORWARDED_ALLOW_IPS=*`, addresses claimed in `CF-Connecting-IP` or `X-Forwarded-For`
+  when PixDrop's port can be reached without the proxy, or behind a proxy that keeps the
+  client's own `X-Forwarded-For`: see [What is not protected](#what-is-not-protected).
 - What a user can do with a valid token: generate images at the provider's expense, and
   fill the disk.
 - Tokens or transfer links read off a connection without HTTPS, or from URLs that carry

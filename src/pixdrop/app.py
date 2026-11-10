@@ -69,6 +69,8 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
         log.info("%d model(s) configured%s", len(catalog.models), f", default {catalog.default}" if catalog.default else "")
         if settings.public_base_url:
             log.info("URLs are given as %s/...", settings.public_base_url)
+        proxies = "any peer" if settings.forwarded_allow_ips == "*" else settings.forwarded_allow_ips
+        log.info("clients' addresses come from X-Forwarded-For in requests from %s (FORWARDED_ALLOW_IPS)", proxies)
         if mcp is not None:
             minutes = settings.link_expiry_seconds / 60
             log.info("MCP server at %s, transfer links valid for %g minute(s)", api.MCP_PATH, minutes)

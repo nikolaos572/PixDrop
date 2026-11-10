@@ -335,23 +335,31 @@ matter:
   `https://example.com/pixdrop/`, and a `PUBLIC_BASE_URL` with a path stops the server at
   startup.
 - **The client's address.** It is recorded with each job, logged, and binds the MCP
-  server's transfer links to the agent's computer. How PixDrop finds it depends on
-  `FORWARDED_ALLOW_IPS`:
-  - With `*` (the default: any peer may be a proxy), from the first address in
-    `X-Forwarded-For`, else from Cloudflare's `CF-Connecting-IP` header, else from the
-    connection. A proxy that sets `X-Forwarded-For` therefore decides, whatever
-    `CF-Connecting-IP` a client sends. Anyone who can reach PixDrop's port directly can
-    send these headers with any address, so **publish the port only to the proxy**: `-p
-    127.0.0.1:8000:8000` when the proxy runs on the same machine, or no `-p` at all when
-    the proxy is a container on the same Docker network. Have the proxy set
-    `X-Forwarded-For` to the client's address rather than add to the one the client sent
-    (nginx: `$remote_addr`, not `$proxy_add_x_forwarded_for`, as in the example below),
-    since the first address of the list is the one used.
-  - With the proxies' addresses (such as `172.17.0.1`, the Docker network's gateway, for a
-    proxy on the same machine), from `X-Forwarded-For` only when the request comes from one
-    of them, as uvicorn reads it (the last address in the list that is not one of the
-    proxies); other clients' headers are ignored, so they cannot claim another address.
-    `CF-Connecting-IP` is then not used.
+  server's transfer links to the agent's computer. PixDrop takes it from the proxy's
+  `X-Forwarded-For` header only in requests from the proxies that `FORWARDED_ALLOW_IPS`
+  names, and from the connection otherwise. The default, `127.0.0.1`, names a proxy on the
+  same machine when PixDrop runs without Docker. A container sees its proxy at another
+  address, so until you name the proxy, every request seems to come from it: the log shows
+  the proxy's address on every line. Set `FORWARDED_ALLOW_IPS` to that address:
+  - for a proxy on the same machine that forwards to the published port, usually
+    `172.17.0.1`, the gateway of Docker's default network;
+  - for a proxy in a container on the same Docker network, that network's subnet, such as
+    `172.18.0.0/16` (see `docker network inspect <network>`), since the proxy container's
+    own address can change.
+
+  uvicorn then takes the last address of `X-Forwarded-For` that is not one of the proxies,
+  and ignores the headers of every other client, so that no one can claim another address.
+  Separate several proxies or networks with commas; an entry that is not an IP address or
+  network stops the server at startup instead of being ignored, and the startup log says
+  whose `X-Forwarded-For` is used.
+
+  `*` trusts every peer instead: the client's address is then the first address in
+  `X-Forwarded-For`, else Cloudflare's `CF-Connecting-IP` header, else the connection's.
+  Anyone who can reach PixDrop's port directly can then claim any address, so use it only
+  when the port can be reached only through the proxy (`-p 127.0.0.1:8000:8000`, or no `-p`
+  with the proxy on the same Docker network), and have the proxy set `X-Forwarded-For` to the
+  client's address rather than add to the one the client sent (nginx: `$remote_addr`, not
+  `$proxy_add_x_forwarded_for`), since the first address of the list is the one used.
 - **The scheme.** The proxies of `FORWARDED_ALLOW_IPS` are also trusted for
   `X-Forwarded-Proto`: the server then knows that the client used HTTPS, marks the web
   page's cookie `Secure`, and, without `PUBLIC_BASE_URL`, hands out `https://` URLs.
@@ -385,17 +393,21 @@ server {
 ```bash
 docker run -d --name pixdrop -p 127.0.0.1:8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens -e PUBLIC_BASE_URL=https://pixdrop.example.com \
+  -e FORWARDED_ALLOW_IPS=172.17.0.1 \
   --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
   pixdrop
 ```
 
-Behind Cloudflare, `*` is not enough: Cloudflare adds the client's address at the end of
-an `X-Forwarded-For` the client sent, so the first address can be anything. Either put a
-proxy of your own behind Cloudflare that sets `X-Forwarded-For` from Cloudflare's
-`CF-Connecting-IP` (nginx: `proxy_set_header X-Forwarded-For $http_cf_connecting_ip;`) and
-accepts connections only from Cloudflare, or set `FORWARDED_ALLOW_IPS` to Cloudflare's
-address ranges ([cloudflare.com/ips](https://www.cloudflare.com/ips/), comma-separated), so
-that the address Cloudflare added is the one used.
+Publishing the port on `127.0.0.1` only also keeps anyone from going around the proxy.
+
+Behind Cloudflare, set `FORWARDED_ALLOW_IPS` to Cloudflare's address ranges
+([cloudflare.com/ips](https://www.cloudflare.com/ips/), comma-separated), so that the address
+Cloudflare adds to `X-Forwarded-For` is the one used; or put a proxy of your own behind
+Cloudflare, which accepts connections only from Cloudflare and sets `X-Forwarded-For` from
+its `CF-Connecting-IP` header (nginx: `proxy_set_header X-Forwarded-For
+$http_cf_connecting_ip;`), and name that proxy. `*` is not enough there: Cloudflare adds the
+client's address at the end of an `X-Forwarded-For` the client sent, so the first address
+can be anything.
 
 ## Container limits
 
@@ -469,7 +481,8 @@ Each line has the time (in the `TZ` time zone), the level and one event:
   answer) and the reason. Other successful reads are not logged, nor are medium-size
   downloads through the API: the web page repeats its reads every few seconds and loads the
   medium-size preview of every job it shows, and Docker repeats its health check every 30
-  seconds.
+  seconds. Behind a reverse proxy, the address is the proxy's until `FORWARDED_ALLOW_IPS`
+  names it (see [Reverse proxies](#reverse-proxies)).
 - One line per finished job: its model, the time the generation took, the number of images
   and the cost, or the error.
 - The providers' model catalogues: how many models each lists and how many configured
