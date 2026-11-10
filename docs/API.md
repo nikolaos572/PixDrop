@@ -211,7 +211,7 @@ on the text.
 | `206 Partial Content` | Part of an image, as asked with a `Range` header. |
 | `400 Bad Request` | The request cannot be used: an empty prompt, an unknown model, an option the model does not accept or a value it does not allow, a reference image that is not one, or too many of them. `detail` says why. |
 | `401 Unauthorized` | No token, or a token the server does not know. |
-| `403 Forbidden` | A cookie-authenticated change without `X-Requested-With`. |
+| `403 Forbidden` | A cookie-authenticated change without `X-Requested-With`, or a change that a browser sent from a page of another site than this server (its `Origin` header): see [Security](SECURITY.md). |
 | `404 Not Found` | No such job (or a job of another user), no such image (yet), or no such transfer link. |
 | `405 Method Not Allowed` | The endpoint does not accept this method. |
 | `409 Conflict` | Reference images sent for a job that is no longer waiting for them. |

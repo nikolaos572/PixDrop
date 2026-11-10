@@ -195,6 +195,8 @@ def test_web_ui_and_auth(server):
     assert 'id="login-form"' not in httpx2.get(f"{server.url}/", headers=cookie).text
     assert httpx2.delete(f"{server.url}/api/session", headers=cookie).status_code == 204
     assert 'id="login-form"' in httpx2.get(f"{server.url}/", headers=cookie).text  # a copy of the cookie is logged out too
+    refused = httpx2.post(f"{server.url}/api/session", json={"token": TOKEN}, headers={"Origin": "https://evil.example"})
+    assert refused.status_code == 403 and "set-cookie" not in refused.headers  # sent from a page of another site
 
 
 def test_generates_from_references_and_serves_both_sizes(server, data):

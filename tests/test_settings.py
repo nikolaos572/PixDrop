@@ -118,6 +118,8 @@ def test_enable_mcp_flag(value, expected):
         # The service is served at the root of its address: the web page uses paths such as /api/jobs.
         ("PUBLIC_BASE_URL", "https://example.com/pixdrop", "PUBLIC_BASE_URL must look like"),
         ("PUBLIC_BASE_URL", "https://example.com/a/b/", "PUBLIC_BASE_URL must look like"),
+        ("PUBLIC_BASE_URL", "https://pixdrop.example.com:99999", "PUBLIC_BASE_URL must look like"),
+        ("PUBLIC_BASE_URL", "https://user@pixdrop.example.com", "PUBLIC_BASE_URL must look like"),
         # uvicorn would ignore these without a word: a network with host bits, a name, a list with *.
         ("FORWARDED_ALLOW_IPS", "172.17.0.1/16", "FORWARDED_ALLOW_IPS must be IP addresses or networks"),
         ("FORWARDED_ALLOW_IPS", "proxy.example.com", "got 'proxy.example.com'"),

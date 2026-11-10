@@ -329,7 +329,10 @@ matter:
 
 - **The address.** Set `PUBLIC_BASE_URL` to the address users reach, such as
   `https://pixdrop.example.com`, so that the URLs in jobs, the MCP server's address in Server
-  Info and the transfer links point there, whatever the proxy sends as `Host`. PixDrop must
+  Info and the transfer links point there, whatever the proxy sends as `Host`, and so that
+  browsers may send changes (a login, a generation) only from pages at exactly that address.
+  Without it, they may from pages of the host the request was sent to, which the proxy must
+  then pass on (nginx: `proxy_set_header Host $host;`). PixDrop must
   be served at the root of its address (a domain or subdomain of its own): the web page
   uses paths such as `/api/jobs`, so it cannot live under a path like
   `https://example.com/pixdrop/`, and a `PUBLIC_BASE_URL` with a path stops the server at

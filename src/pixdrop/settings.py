@@ -114,9 +114,28 @@ def _base_url(raw: str) -> str:
     if not url:
         return ""
     parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.netloc or parts.path or parts.query or parts.fragment:
+    if url_origin(url) is None or "@" in parts.netloc or parts.path or parts.query or parts.fragment:
         raise SettingsError(f"PUBLIC_BASE_URL must look like https://pixdrop.example.com (without a path), got {raw!r}")
     return url
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def url_origin(url: str) -> str | None:
+    """The origin of an http(s) URL, written one way: scheme://host[:port], lowercased and
+    without the scheme's default port, as browsers write their Origin header. None for anything
+    else, such as the "null" of sandboxed pages."""
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port
+    except ValueError:
+        return None
+    scheme, host = parts.scheme.lower(), parts.hostname  # lowercased, without an IPv6 address's brackets
+    if scheme not in _DEFAULT_PORTS or not host:
+        return None
+    host = f"[{host}]" if ":" in host else host
+    return f"{scheme}://{host}" if port in (None, _DEFAULT_PORTS[scheme]) else f"{scheme}://{host}:{port}"
 
 
 def _timezone(name: str) -> ZoneInfo:

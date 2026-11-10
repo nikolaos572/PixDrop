@@ -24,6 +24,14 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   over HTTPS. Changes made with it require an `X-Requested-With` header, which other sites
   cannot send without the server's consent, and the server gives none (no CORS). The MCP
   server does not accept the cookie at all.
+- **Requests from other sites.** A `POST`, `PUT`, `PATCH` or `DELETE` whose `Origin` header
+  is not this server's is refused (`403`) before anything else happens, the token and the
+  body included: with `PUBLIC_BASE_URL`, the origin must be exactly its scheme, host and
+  port; without it, its host must be the one the request was sent to. That stops forged
+  requests from every other site, sibling subdomains such as `blog.example.com` included
+  (`SameSite` cookies take those for the same site), also to the MCP server and the transfer
+  links. Browsers always send `Origin` with these requests; requests without it (curl,
+  scripts, agents) cannot be forged by a web page, so they pass, and still need a token.
 - **Pages** are served with a strict Content Security Policy (scripts, styles and images
   only from the server itself, no plugins, not shown in frames of other sites) and are never
   cached. Every response carries
