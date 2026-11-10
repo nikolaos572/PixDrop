@@ -18,7 +18,7 @@ def test_defaults():
     assert settings.max_active_jobs == 4
     assert settings.medium_image_px == 512
     assert (settings.enable_mcp, settings.link_expiry_seconds) == (False, 3600)  # off by default, as in TeXdrop
-    assert settings.forwarded_allow_ips == "*"
+    assert settings.forwarded_allow_ips == "127.0.0.1"  # a proxy on this machine, so none in Docker
     assert (settings.host, settings.port) == ("0.0.0.0", 8000)
 
 
@@ -118,11 +118,26 @@ def test_enable_mcp_flag(value, expected):
         # The service is served at the root of its address: the web page uses paths such as /api/jobs.
         ("PUBLIC_BASE_URL", "https://example.com/pixdrop", "PUBLIC_BASE_URL must look like"),
         ("PUBLIC_BASE_URL", "https://example.com/a/b/", "PUBLIC_BASE_URL must look like"),
+        ("PUBLIC_BASE_URL", "https://pixdrop.example.com:99999", "PUBLIC_BASE_URL must look like"),
+        ("PUBLIC_BASE_URL", "https://user@pixdrop.example.com", "PUBLIC_BASE_URL must look like"),
+        # uvicorn would ignore these without a word: a network with host bits, a name, a list with *.
+        ("FORWARDED_ALLOW_IPS", "172.17.0.1/16", "FORWARDED_ALLOW_IPS must be IP addresses or networks"),
+        ("FORWARDED_ALLOW_IPS", "proxy.example.com", "got 'proxy.example.com'"),
+        ("FORWARDED_ALLOW_IPS", "10.0.0.1,*", "or \\* alone, got '\\*'"),
+        ("FORWARDED_ALLOW_IPS", "10.0.0.1,,10.0.0.2", "got ''"),
     ],
 )
 def test_invalid_values_are_refused(name, value, message):
     with pytest.raises(SettingsError, match=message):
         Settings.from_env({name: value})
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("", "127.0.0.1"), ("*", "*"), (" 172.17.0.1 ", "172.17.0.1"), ("172.17.0.1, 172.18.0.0/16,::1", "172.17.0.1,172.18.0.0/16,::1")],
+)
+def test_the_trusted_proxies(value, expected):
+    assert Settings.from_env({"FORWARDED_ALLOW_IPS": value}).forwarded_allow_ips == expected
 
 
 def test_the_data_directory_is_known_even_when_other_settings_are_invalid():

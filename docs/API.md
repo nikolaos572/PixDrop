@@ -132,8 +132,12 @@ curl "$URL/api/session?token=$TOKEN"
   `token=***`).
 - To check a token, call [`GET /api/session`](#get-apisession), which returns the user name.
 
-**Browsers.** The web page logs in with [`POST /api/session`](#post-apisession), which keeps
-the token in an HTTP-only cookie named `pixdrop_token`. The cookie is used only when the
+**Browsers.** The web page logs in with [`POST /api/session`](#post-apisession), which starts
+a session and keeps it in an HTTP-only cookie named `pixdrop_session`. The cookie holds a
+random session id, not the token, and works until the browser logs out
+([`DELETE /api/session`](#delete-apisession)), for 30 days at most, and only while the user
+keeps the token they logged in with; otherwise the request gets `401` with
+`{"detail": "the session ended or expired: log in again"}`. The cookie is used only when the
 request has none of the other three. Requests authenticated by it must carry the header
 `X-Requested-With` (any value) when they change something (`POST`, `PUT`, `PATCH`,
 `DELETE`); otherwise they get `403 Forbidden` with `{"detail": "cookie-authenticated
@@ -207,7 +211,7 @@ on the text.
 | `206 Partial Content` | Part of an image, as asked with a `Range` header. |
 | `400 Bad Request` | The request cannot be used: an empty prompt, an unknown model, an option the model does not accept or a value it does not allow, a reference image that is not one, or too many of them. `detail` says why. |
 | `401 Unauthorized` | No token, or a token the server does not know. |
-| `403 Forbidden` | A cookie-authenticated change without `X-Requested-With`. |
+| `403 Forbidden` | A cookie-authenticated change without `X-Requested-With`, or a change that a browser sent from a page of another site than this server (its `Origin` header): see [Security](SECURITY.md). |
 | `404 Not Found` | No such job (or a job of another user), no such image (yet), or no such transfer link. |
 | `405 Method Not Allowed` | The endpoint does not accept this method. |
 | `409 Conflict` | Reference images sent for a job that is no longer waiting for them. |
@@ -875,9 +879,10 @@ Returns the user the request is authenticated as. Useful to check a token.
 
 ### `POST /api/session`
 
-Logs a browser in: checks a token and, if it is valid, stores it in the `pixdrop_token`
-cookie (`HttpOnly`, `SameSite=Strict`, `Path=/`, valid for 30 days, and `Secure` when the
-server is reached over HTTPS). Used by the web page's login form; programs do not need it.
+Logs a browser in: checks a token and, if it is valid, starts a session of 30 days and
+stores its id in the `pixdrop_session` cookie (`HttpOnly`, `SameSite=Strict`, `Path=/`, and
+`Secure` when the server is reached over HTTPS). The cookie never holds the token. Used by
+the web page's login form; programs do not need it.
 
 **Request**: JSON
 
@@ -892,7 +897,9 @@ than 256 characters.
 
 ### `DELETE /api/session`
 
-Logs a browser out: deletes the cookie (and nothing else). Needs no token.
+Logs a browser out: ends the session on the server, so that its cookie stops working
+everywhere, also where it was copied to, and deletes the cookie (nothing else is deleted).
+Needs no token.
 
 **Response** `204`, without a body.
 

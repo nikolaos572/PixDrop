@@ -12,6 +12,7 @@ from helpers import (
     RECORD_FIELDS,
     TOKENS,
     add_job,
+    browser_of,
     config_with,
     generate,
     gif,
@@ -538,10 +539,17 @@ def test_without_public_base_url_urls_follow_the_request(app):
         ({}, "testclient"),
     ],
 )
-def test_the_clients_address_is_recorded(client, data_dir, headers, client_ip):
-    job = submit(client, headers=ALICE | headers).json()
+def test_with_any_peer_trusted_the_clients_address_comes_from_its_headers(make_app, data_dir, headers, client_ip):
+    with TestClient(make_app(forwarded_allow_ips="*"), headers=dict(ALICE)) as client:
+        job = submit(client, headers=ALICE | headers).json()
     assert job["client_ip"] == client_ip
     assert record_of(data_dir, "alice", job["id"])["client_ip"] == client_ip
+
+
+def test_by_default_the_clients_headers_are_ignored(client, data_dir):
+    # Only a proxy on this machine (127.0.0.1) is trusted, and uvicorn reads its headers.
+    job = submit(client, headers=ALICE | {"X-Forwarded-For": "203.0.113.7", "CF-Connecting-IP": "198.51.100.4"}).json()
+    assert job["client_ip"] == "testclient"
 
 
 def test_forwarded_headers_count_only_when_every_peer_may_be_a_proxy(make_app):
@@ -561,7 +569,7 @@ def test_the_source_of_each_job(client, data_dir):
     by_header = submit(client).json()
     by_api_key = share(client, headers={"X-API-Key": TOKENS["alice"]}).post("/api/jobs", data={"prompt": "x"}).json()
     by_query = share(client).post("/api/jobs", params={"token": TOKENS["alice"]}, data={"prompt": "x"}).json()
-    browser = share(client, cookies={"pixdrop_token": TOKENS["alice"]}, headers={"X-Requested-With": "fetch"})
+    browser = browser_of(client, headers={"X-Requested-With": "fetch"})
     by_cookie = browser.post("/api/jobs", data={"prompt": "x"}).json()
     assert [job["source"] for job in (by_header, by_api_key, by_query, by_cookie)] == ["api", "api", "api", "web"]
     assert record_of(data_dir, "alice", by_cookie["id"])["source"] == "web"

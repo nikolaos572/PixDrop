@@ -8,6 +8,7 @@ import logging
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, nullcontext
+from urllib.parse import urlsplit
 
 import httpx2
 from fastapi import FastAPI, Request, Response, status
@@ -25,7 +26,8 @@ from .jobs import JobService
 from .links import REFUSAL, LinkRefused, LinkService
 from .mcp_server import McpEndpoint
 from .providers import ProviderClient
-from .settings import Settings
+from .sessions import Sessions
+from .settings import Settings, url_origin
 from .storage import Storage
 from .store import JobStore
 from .users import UserRegistry
@@ -34,6 +36,7 @@ from .worker import Worker
 log = logging.getLogger(__name__)
 
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _MULTIPART_OVERHEAD = 1024**2  # room for the prompt and the other form fields around the files
 _SMALL_BODY = 64 * 1024  # a login, and anything else that is not an upload
 _MCP_BODY = 1024**2  # a tool call: JSON with a prompt of at most 32,000 characters
@@ -50,6 +53,7 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     users = UserRegistry(settings.users_file)
     if not users.names():
         log.warning("no users yet: add one with python -m pixdrop adduser <name>")
+    sessions = Sessions(storage.sessions_file, users, auth.COOKIE_MAX_AGE)
     models = ModelRegistry(settings.config_file)
     service = JobService(
         store, storage, models, max_active_jobs=settings.max_active_jobs, pending_seconds=settings.link_expiry_seconds
@@ -67,6 +71,8 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
         log.info("%d model(s) configured%s", len(catalog.models), f", default {catalog.default}" if catalog.default else "")
         if settings.public_base_url:
             log.info("URLs are given as %s/...", settings.public_base_url)
+        proxies = "any peer" if settings.forwarded_allow_ips == "*" else settings.forwarded_allow_ips
+        log.info("clients' addresses come from X-Forwarded-For in requests from %s (FORWARDED_ALLOW_IPS)", proxies)
         if mcp is not None:
             minutes = settings.link_expiry_seconds / 60
             log.info("MCP server at %s, transfer links valid for %g minute(s)", api.MCP_PATH, minutes)
@@ -91,6 +97,7 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     app.state.settings = settings
     app.state.storage = storage
     app.state.users = users
+    app.state.sessions = sessions
     app.state.models = models
     app.state.service = service
     if mcp is not None:
@@ -143,11 +150,14 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
         # Refuse oversized bodies before reading them. The server never reads past Content-Length,
         # so requiring the header (and refusing chunked bodies, which do without it) bounds every
         # request. Uploads are authenticated first, so that no one receives a large body without a
-        # token (links check theirs before reading, and /mcp authenticates first too).
+        # token (links check theirs before reading, and /mcp authenticates first too). Before all
+        # that, changes that a browser sends from a page of another site are refused.
         length = request.headers.get("content-length", "")
         path = request.url.path
         response: Response | None = None
-        if request.method in _BODY_METHODS or "transfer-encoding" in request.headers:
+        if refusal := _foreign_origin(request, settings.public_base_url):
+            response = refuse(request, status.HTTP_403_FORBIDDEN, refusal)
+        elif request.method in _BODY_METHODS or "transfer-encoding" in request.headers:
             if "transfer-encoding" in request.headers or not length.isdigit():
                 response = refuse(request, status.HTTP_411_LENGTH_REQUIRED, "Content-Length required")
             elif int(length) > (limit := body_limit(path)):
@@ -181,6 +191,31 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
     app.include_router(web.router)
     app.mount("/static", StaticFiles(directory=web.STATIC_DIR), name="static")
     return app
+
+
+def _foreign_origin(request: Request, public_base_url: str) -> str | None:
+    """Why the request is refused, if a browser sent it from a page that is not this server's.
+
+    Browsers send the page's origin in an Origin header with every POST, PUT, PATCH and DELETE.
+    It must be exactly PUBLIC_BASE_URL's scheme, host and port. Without PUBLIC_BASE_URL, its host
+    must be the one the request was sent to (the scheme and port the server sees may be a proxy's).
+    Another site is refused even when it is a sibling subdomain, which SameSite cookies take for
+    the same site. Requests without the header do not come from a browser (curl, agents), so no
+    other site can make them; they pass, and need a token."""
+    origin = request.headers.get("origin")
+    if request.method in _SAFE_METHODS or origin is None:
+        return None
+    if public_base_url:
+        expected = url_origin(public_base_url)
+        if url_origin(origin) == expected:
+            return None
+        return (
+            f"this server's address is {expected} (PUBLIC_BASE_URL), but the request came from a page at {origin}: "
+            f"open {expected}, or set PUBLIC_BASE_URL to the address you use"
+        )
+    if url_origin(origin) is not None and urlsplit(origin).hostname == request.url.hostname:
+        return None
+    return f"the request came from a page at {origin}, not from this server ({request.url.hostname})"
 
 
 async def _expire_pending(service: JobService) -> None:

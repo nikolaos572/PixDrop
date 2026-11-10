@@ -2,30 +2,32 @@
 CSRF header, the MCP endpoint (which ignores the cookie), and the users file reloaded while running."""
 
 import pytest
-from helpers import TOKENS, png, reference, share, write_json
+from helpers import TOKENS, browser_of, login, png, reference, share, write_json
 
 ALICE_TOKEN = TOKENS["alice"]
 WRONG = "wrong-token-0123456789"
+USERS = {token: name for name, token in TOKENS.items()}
 MCP_LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
 
 
-def credentials(bearer=None, api_key=None, query=None, cookie=None):
-    """The headers and query parameters that carry these tokens."""
+def credentials(client, bearer=None, api_key=None, query=None, cookie=None):
+    """The headers and query parameters that carry these tokens. A cookie given a user's token
+    holds a session of that user, as logging in on the web page makes."""
     headers, params = {}, {}
     if bearer is not None:
         headers["Authorization"] = f"Bearer {bearer}"
     if api_key is not None:
         headers["X-API-Key"] = api_key
     if cookie is not None:
-        headers["Cookie"] = f"pixdrop_token={cookie}"
+        headers["Cookie"] = f"pixdrop_session={login(client, USERS[cookie]) if cookie in USERS else cookie}"
     if query is not None:
         params["token"] = query
     return {"headers": headers, "params": params}
 
 
 def session(client, **tokens):
-    return client.get("/api/session", **credentials(**tokens))
+    return client.get("/api/session", **credentials(client, **tokens))
 
 
 @pytest.mark.parametrize("place", ["bearer", "api_key", "query", "cookie"])
@@ -37,7 +39,8 @@ def test_each_place_carries_the_token(anonymous, place):
 @pytest.mark.parametrize("place", ["bearer", "api_key", "query", "cookie"])
 def test_a_wrong_token_is_refused_wherever_it_is(anonymous, place):
     response = session(anonymous, **{place: WRONG})
-    assert (response.status_code, response.json()) == (401, {"detail": "missing or invalid token"})
+    detail = "the session ended or expired: log in again" if place == "cookie" else "missing or invalid token"
+    assert (response.status_code, response.json()) == (401, {"detail": detail})
     assert response.headers["WWW-Authenticate"] == "Bearer"
 
 
@@ -109,13 +112,13 @@ def test_every_endpoint_but_health_needs_a_token(anonymous, method, path):
 
 
 def test_the_cookie_reads_without_the_csrf_header(client):
-    browser = share(client, cookies={"pixdrop_token": ALICE_TOKEN})
+    browser = browser_of(client)
     assert browser.get("/api/jobs").status_code == 200
     assert browser.get("/api/info").json()["account"]["user"] == "alice"
 
 
 def test_changes_through_the_cookie_need_the_csrf_header(client, data_dir):
-    browser = share(client, cookies={"pixdrop_token": ALICE_TOKEN})
+    browser = browser_of(client)
     refused = browser.post("/api/jobs", data={"prompt": "a red fox"})
     assert (refused.status_code, refused.json()) == (403, {"detail": "cookie-authenticated requests need a X-Requested-With header"})
     pending = client.post("/api/jobs", data={"prompt": "x", "reference_count": "1"}).json()
@@ -129,7 +132,7 @@ def test_changes_through_the_cookie_need_the_csrf_header(client, data_dir):
 
 def test_explicit_tokens_need_no_csrf_header(client):
     # Another site cannot make a browser send them; the cookie alongside is not even looked at.
-    response = client.post("/api/jobs", data={"prompt": "a red fox"}, headers={"Cookie": f"pixdrop_token={TOKENS['bob']}"})
+    response = client.post("/api/jobs", data={"prompt": "a red fox"}, headers={"Cookie": f"pixdrop_session={login(client, 'bob')}"})
     assert (response.status_code, response.json()["source"]) == (201, "api")
     assert client.get(f"/api/jobs/{response.json()['id']}").status_code == 200  # alice's, not bob's
 
@@ -139,7 +142,7 @@ def test_explicit_tokens_need_no_csrf_header(client):
 
 @pytest.mark.parametrize("tokens", [{"bearer": ALICE_TOKEN}, {"api_key": ALICE_TOKEN}, {"query": ALICE_TOKEN}])
 def test_the_mcp_endpoint_takes_the_token_in_a_header_or_the_url(anonymous, tokens):
-    request = credentials(**tokens)
+    request = credentials(anonymous, **tokens)
     response = anonymous.post("/mcp", json=MCP_LIST, params=request["params"], headers=MCP_HEADERS | request["headers"])
     assert response.status_code == 200
     assert "tools" in response.json()["result"]
@@ -151,11 +154,11 @@ def test_the_mcp_endpoint_takes_the_token_in_a_header_or_the_url(anonymous, toke
         {},
         {"bearer": WRONG},
         {"bearer": WRONG, "query": ALICE_TOKEN},
-        {"cookie": ALICE_TOKEN},  # no web page calls it: the cookie is not accepted
+        {"cookie": ALICE_TOKEN},  # no web page calls it: the cookie, with a session of alice's, is not accepted
     ],
 )
 def test_the_mcp_endpoint_refuses_other_requests(anonymous, tokens):
-    request = credentials(**tokens)
+    request = credentials(anonymous, **tokens)
     headers = MCP_HEADERS | request["headers"] | {"X-Requested-With": "fetch"}
     response = anonymous.post("/mcp", json=MCP_LIST, params=request["params"], headers=headers)
     assert (response.status_code, response.headers["WWW-Authenticate"]) == (401, "Bearer")

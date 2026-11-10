@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import fcntl
 import io
+import ipaddress
 import json
 import os
 import pty
+import re
+import secrets
 import select
 import shutil
 import stat
@@ -66,7 +69,7 @@ def provider_port() -> int:
 def data(tmp_path: Path, image: str, provider_port: int):
     data = tmp_path / "data"
     data.mkdir()
-    data.chmod(0o777)  # the container runs as uid 1001
+    data.chmod(0o777)  # the container runs as uid 61001
     (data / "users.json").write_text(json.dumps({"users": {"tester": TOKEN}}))
     (data / "config.json").write_text(
         json.dumps(
@@ -86,9 +89,9 @@ def data(tmp_path: Path, image: str, provider_port: int):
 
 
 class Server:
-    """A container of the image, serving a data directory from the host."""
+    """A container of the image, serving a data directory from the host (or a named volume)."""
 
-    def __init__(self, image: str, data: Path, *options: str, hardened: bool = True) -> None:
+    def __init__(self, image: str, data: Path | str, *options: str, hardened: bool = True) -> None:
         self.container = docker(
             "run", "--detach", "--publish", "127.0.0.1::8000", "--volume", f"{data}:/data",
             "--add-host", "host.docker.internal:host-gateway", "--env", "TZ=Europe/Athens",
@@ -127,27 +130,85 @@ def server(image: str, data: Path):
     server.stop()
 
 
+PROCESS_OWNERS = """
+import os
+for pid in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        owner = os.stat(f"/proc/{pid}")
+    except FileNotFoundError:  # ended meanwhile
+        continue
+    print(f"{owner.st_uid}:{owner.st_gid}")
+"""
+
+
 def test_runs_as_an_unprivileged_user(server):
-    assert docker("exec", server.container, "id", "-u") == "1001"
-    assert docker("inspect", "--format", "{{.Config.User}}", server.container) == "app"
+    assert docker("exec", server.container, "id", "-u") == "61001"
+    assert docker("inspect", "--format", "{{.Config.User}}", server.container) == "61001:61001"
+    # Every process, the init process too: never root, nor a usual login of the host such as uid 1000.
+    assert set(docker("exec", server.container, "python", "-c", PROCESS_OWNERS).split()) == {"61001:61001"}
+
+
+def test_a_named_volume_needs_no_preparation(image):
+    volume = docker("volume", "create")
+    try:
+        server = Server(image, volume)
+        try:
+            assert docker("exec", server.container, "stat", "-c", "%u:%g", "/data") == "61001:61001"
+            added = manage(server.container, "adduser", "nikos")
+            assert added.returncode == 0, added.stderr
+            assert session_of(server, added.stdout.strip()) == 200
+        finally:
+            server.stop()
+    finally:
+        subprocess.run(["docker", "volume", "rm", volume], check=False, capture_output=True)
+
+
+def test_a_host_directory_given_to_61001_works(image, tmp_path):
+    """The preparation docs/DEPLOYMENT.md describes for a host directory, without chmod 777."""
+    data = tmp_path / "host-data"
+    data.mkdir()
+
+    def as_root(*command: str) -> None:
+        subprocess.run(["docker", "run", "--rm", "--user", "0", "--volume", f"{data}:/data", image, *command], check=True)
+
+    try:
+        as_root("chown", "61001:61001", "/data")  # the form that also works with rootless Docker
+        server = Server(image, data)
+        try:
+            added = manage(server.container, "adduser", "nikos")
+            assert added.returncode == 0, added.stderr
+            assert session_of(server, added.stdout.strip()) == 200
+            owners = docker("exec", server.container, "stat", "-c", "%u:%g", "/data/users.json", "/data/logs/server.log")
+            assert owners.split() == ["61001:61001", "61001:61001"]
+        finally:
+            server.stop()
+    finally:
+        as_root("chown", "-R", f"{os.getuid()}:{os.getgid()}", "/data")  # for pytest to remove it
 
 
 def test_web_ui_and_auth(server):
     assert 'id="login-form"' in httpx2.get(f"{server.url}/").text
     assert httpx2.get(f"{server.url}/api/jobs").status_code == 401
     assert httpx2.get(f"{server.url}/api/jobs", params={"token": TOKEN}).status_code == 200
+    login = httpx2.post(f"{server.url}/api/session", json={"token": TOKEN})
+    cookie = {"Cookie": f"pixdrop_session={login.cookies['pixdrop_session']}"}
+    assert 'id="login-form"' not in httpx2.get(f"{server.url}/", headers=cookie).text
+    assert httpx2.delete(f"{server.url}/api/session", headers=cookie).status_code == 204
+    assert 'id="login-form"' in httpx2.get(f"{server.url}/", headers=cookie).text  # a copy of the cookie is logged out too
+    refused = httpx2.post(f"{server.url}/api/session", json={"token": TOKEN}, headers={"Origin": "https://evil.example"})
+    assert refused.status_code == 403 and "set-cookie" not in refused.headers  # sent from a page of another site
 
 
 def test_generates_from_references_and_serves_both_sizes(server, data):
     files = [("reference", ("front.png", png(), "image/png")), ("reference", ("logo.svg", SVG, "image/svg+xml"))]
     response = server.client.post(
-        "/api/jobs", params={"wait": 60}, headers={"X-Forwarded-For": "198.51.100.7"},
+        "/api/jobs", params={"wait": 60},
         data={"prompt": "the back of this sprite", "model": "fake-chat", "aspect_ratio": "1:1"}, files=files,
     )  # fmt: skip
     assert response.status_code == 201, response.text
     job = response.json()
     assert job["status"] == "completed", job
-    assert job["client_ip"] == "198.51.100.7"
+    assert ipaddress.ip_address(job["client_ip"])
     assert job["created_at"][-6:] in ("+02:00", "+03:00")  # TZ=Europe/Athens
     assert [reference["filename"] for reference in job["references"]] == ["1_front.png", "2_logo.svg"]
     full = server.client.get(f"/api/jobs/{job['id']}/images/1")
@@ -159,8 +220,39 @@ def test_generates_from_references_and_serves_both_sizes(server, data):
     user_dir = data / "outputs" / "tester"
     record = json.loads((user_dir / f"{job['id']}.json").read_text())
     assert record["status"] == "completed" and record["images"][0]["filename"] == f"{job['id']}.png"
-    assert (user_dir / f"{job['id']}.png").stat().st_uid == 1001
+    assert (user_dir / f"{job['id']}.png").stat().st_uid == 61001
     assert sorted(path.name for path in (user_dir / f"{job['id']}_reference").iterdir()) == ["1_front.png", "2_logo.svg"]
+
+
+def logged_client(server: Server, forwarded_for: str) -> str:
+    """Send a request that says it comes through a proxy for this address; return the client's
+    address that the server's log shows for it (a refused request is logged)."""
+    marker = secrets.token_hex(8)
+    httpx2.get(f"{server.url}/api/jobs", params={"probe": marker}, headers={"X-Forwarded-For": forwarded_for})
+    pattern = re.compile(rf"INFO    (\S+) - GET /api/jobs\?probe={marker} 401 ")
+    deadline = time.monotonic() + 10
+    while not (match := pattern.search(subprocess.run(["docker", "logs", server.container], capture_output=True, text=True).stderr)):
+        assert time.monotonic() < deadline, f"no log line for the request {marker}"
+        time.sleep(0.2)
+    return match.group(1)
+
+
+def test_x_forwarded_for_counts_only_from_a_trusted_proxy(image, data):
+    # By default no proxy is trusted, so a client cannot put any address it likes in the log.
+    server = Server(image, data)
+    try:
+        peer = logged_client(server, "203.0.113.7")
+        assert peer != "203.0.113.7"
+    finally:
+        server.stop()
+    # Trusting exactly that peer, as the docs say to find it, the log shows the visitor's address.
+    server = Server(image, data, "--env", f"FORWARDED_ALLOW_IPS={peer}")
+    try:
+        assert logged_client(server, "203.0.113.7") == "203.0.113.7"
+        job = server.client.post("/api/jobs", headers={"X-Forwarded-For": "203.0.113.7"}, data={"prompt": "a fox", "reference_count": "1"})
+        assert job.json()["client_ip"] == "203.0.113.7"
+    finally:
+        server.stop()
 
 
 def test_jobs_survive_a_new_container(image, data):
@@ -299,7 +391,7 @@ def test_users_are_managed_while_the_server_runs(image, data):
         first = added.stdout.strip()
         assert session_of(server, first) == 200
         written = (data / "users.json").stat()
-        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (61001, 0o600)
 
         reset = manage(server.container, "reset-token", "nikos")
         assert reset.returncode == 0, reset.stderr
@@ -446,7 +538,7 @@ def test_setup_and_modify_models_in_a_terminal(image, data, fake_defaults):
         assert "sk-first-key" not in terminal.output
         assert "with 2 models" in terminal.output and "reference images 0-4; options: aspect_ratio, quality" in terminal.output
         written = config.stat()
-        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (61001, 0o600)
 
         # The server follows, without a restart: the models at once, and their options from the catalogue.
         assert server.generate("a first picture")["status"] == "completed"
@@ -541,10 +633,33 @@ def test_the_log_file_outlives_the_container_and_hides_tokens(image, data):
     assert "token=***" in log and TOKEN not in log
 
 
-def test_a_plain_docker_run_needs_no_options(image, data):
-    server = Server(image, data, hardened=False)
+SERVER_STATUS = """
+import pathlib
+for process in pathlib.Path("/proc").glob("[0-9]*"):
     try:
+        if (process / "cmdline").read_bytes() == b"python\\0-m\\0pixdrop\\0":
+            print((process / "status").read_text())
+    except OSError:
+        pass
+"""
+
+
+@pytest.mark.parametrize("init", [[], ["--init"]], ids=["own-init", "docker-init"])
+def test_a_plain_docker_run_needs_no_options(image, data, init):
+    # No --cap-drop, --security-opt or --init: the image itself provides what they would.
+    server = Server(image, data, *init, hardened=False)
+    try:
+        assert "CapEff:\t0000000000000000" in docker("exec", server.container, "python", "-c", SERVER_STATUS)
+        docker("exec", server.container, "sh", "-c", "sleep 1 & exit")  # leaves an orphan, reparented to process 1
+        time.sleep(2)
+        assert ") Z " not in docker("exec", server.container, "sh", "-c", "cat /proc/[0-9]*/stat")  # no zombie
         assert server.generate("a cat")["status"] == "completed"
+        start = time.monotonic()
+        docker("stop", server.container)
+        assert time.monotonic() - start < 8  # the server got docker stop's signal (not killed after 10 s)
+        logs = subprocess.run(["docker", "logs", server.container], capture_output=True, text=True, check=True)
+        assert "Application shutdown complete." in logs.stderr
+        assert "tini" not in logs.stdout + logs.stderr  # no warning from tini as process 2 under --init
     finally:
         server.stop()
 

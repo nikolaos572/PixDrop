@@ -87,7 +87,7 @@ def test_a_new_token_changes_only_that_users(path):
 
 
 def test_a_link_stays_a_link(tmp_path):
-    shared = tmp_path / "texdrop" / "config.json"
+    shared = tmp_path / "texdrop" / "users.json"
     shared.parent.mkdir()
     write_json(shared, {"users": {"alice": OTHER_TOKEN}})
     link = tmp_path / "users.json"

@@ -17,6 +17,7 @@ from helpers import (
     ALICE,
     TOKENS,
     add_job,
+    browser_of,
     free_port,
     generate,
     png,
@@ -127,6 +128,7 @@ def test_startup_logs_what_it_found(make_app, caplog):
     assert "3 model(s) configured, default gpt-image" in messages
     assert "URLs are given as https://pixdrop.example.com/..." in messages
     assert "MCP server at /mcp, transfer links valid for 60 minute(s)" in messages
+    assert "clients' addresses come from X-Forwarded-For in requests from 127.0.0.1 (FORWARDED_ALLOW_IPS)" in messages
 
 
 def test_startup_recovers_the_jobs_of_the_last_run(settings, upstream, caplog):
@@ -273,5 +275,5 @@ def test_uploads_are_refused_before_their_body_without_a_valid_token(anonymous, 
     files = [("reference", ("a.png", b"x" * 300_000, "image/png"))]  # not even an image: the token is checked first
     response = anonymous.post("/api/jobs", data={"prompt": "a fox"}, files=files)
     assert (response.status_code, response.headers["WWW-Authenticate"]) == (401, "Bearer")
-    cookie_without_header = TestClient(client.app, cookies={"pixdrop_token": "alice-token-0123456789"})
+    cookie_without_header = browser_of(client)
     assert cookie_without_header.post("/api/jobs/1793456280412_a9f3/references", files=files).status_code == 403

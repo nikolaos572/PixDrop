@@ -9,16 +9,29 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
 
 - **Tokens.** Every request to the API but the health check and logging out needs a token
   (or, for a transfer link, its secret), compared in constant time with every known
-  token. A token is accepted in the `Authorization` or `X-API-Key` header, in the URL
-  (`?token=`), or in the web page's cookie; the first of these that a request
+  token. A token is accepted in the `Authorization` or `X-API-Key` header, or in the URL
+  (`?token=`), and the web page's session in its cookie; the first of these that a request
   has decides. The users file is re-read when it changes, so a removed or replaced token
   stops working at once. `python -m pixdrop adduser` and `reset-token` make random 256-bit
   tokens. The file holds the tokens as they are, so `adduser` creates it readable only by its
   owner; keep it that way.
-- **The web page's cookie** is `HttpOnly` (scripts cannot read it), `SameSite=Strict`, and
-  `Secure` over HTTPS. Changes made with it require an `X-Requested-With` header, which
-  other sites cannot send without the server's consent, and the server gives none (no
-  CORS). The MCP server does not accept the cookie at all.
+- **The web page's cookie** holds a session, not the token: a random 256-bit id, which the
+  server keeps in `sessions.json` only as its SHA-256, with that of the token it was started
+  with. **Logging out ends the session on the server**, so the cookie stops working
+  everywhere, also a copy of it taken before. A session also ends after 30 days, and as soon
+  as its user is removed or given a new token (`reset-token` logs every browser of the user
+  out). The cookie is `HttpOnly` (scripts cannot read it), `SameSite=Strict`, and `Secure`
+  over HTTPS. Changes made with it require an `X-Requested-With` header, which other sites
+  cannot send without the server's consent, and the server gives none (no CORS). The MCP
+  server does not accept the cookie at all.
+- **Requests from other sites.** A `POST`, `PUT`, `PATCH` or `DELETE` whose `Origin` header
+  is not this server's is refused (`403`) before anything else happens, the token and the
+  body included: with `PUBLIC_BASE_URL`, the origin must be exactly its scheme, host and
+  port; without it, its host must be the one the request was sent to. That stops forged
+  requests from every other site, sibling subdomains such as `blog.example.com` included
+  (`SameSite` cookies take those for the same site), also to the MCP server and the transfer
+  links. Browsers always send `Origin` with these requests; requests without it (curl,
+  scripts, agents) cannot be forged by a web page, so they pass, and still need a token.
 - **Pages** are served with a strict Content Security Policy (scripts, styles and images
   only from the server itself, no plugins, not shown in frames of other sites) and are never
   cached. Every response carries
@@ -72,24 +85,25 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   address that asked for it, for one complete transfer, and for `LINK_EXPIRY_MINUTES`.
   Every refusal gets the same `404`; the server keeps only the secrets' SHA-256 and never
   logs them. It is off unless `ENABLE_MCP=1`.
-- **The container** runs as the unprivileged user `app` (uid 1001), never as root, and
-  needs no capabilities; the image has an init process (tini).
+- **The container** runs as the unprivileged user `app`, uid and gid 61001, never as root,
+  and needs no capabilities; the image has an init process (tini). The number is above the
+  range Linux gives to real accounts (up to 60000), so it matches no login of the host: should
+  someone break out of the container, they would hold an id that owns nothing there, rather
+  than one such as uid 1000, which often has passwordless `sudo`.
 
 ## What is not protected
 
 - **Plain HTTP.** Without HTTPS, the tokens, the cookie, the transfer links, the prompts and
   the images can be read by anyone who can see the network's traffic. Put a reverse proxy
   with a certificate in front of the service when it is reachable beyond a trusted network.
-- **Client addresses from headers.** With `FORWARDED_ALLOW_IPS=*` (the default), PixDrop
-  takes the client's address from the first address of `X-Forwarded-For`, else
-  `CF-Connecting-IP`, else the connection. Anyone who can reach PixDrop's port without the
-  proxy can then claim any address: in the job records, in the log, and for the transfer
-  links, which are bound to an address. The same holds behind a proxy that adds to the
-  client's own `X-Forwarded-For` instead of replacing it, Cloudflare among them. Publish
-  the port only to a proxy that sets `X-Forwarded-For` (`-p 127.0.0.1:8000:8000`, and
-  `proxy_set_header X-Forwarded-For $remote_addr;` for nginx), or name the proxies in
-  `FORWARDED_ALLOW_IPS`, which makes PixDrop ignore the headers of everyone else; see
-  [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
+- **Client addresses from headers.** A proxy named in `FORWARDED_ALLOW_IPS` can put any
+  address it likes in `X-Forwarded-For`: in the job records, in the log, and for the transfer
+  links, which are bound to an address. So name only your proxy there (by default only
+  `127.0.0.1` is trusted). With `FORWARDED_ALLOW_IPS=*`, PixDrop takes the client's address
+  from the first address of `X-Forwarded-For`, else `CF-Connecting-IP`, else the connection,
+  and anyone who can reach PixDrop's port without the proxy can claim any address; so can
+  anyone behind a proxy that adds to the client's own `X-Forwarded-For` instead of replacing
+  it, Cloudflare among them. See [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
 - **Spending.** Anyone with a token can generate images at the provider's expense, as many
   as they like. `MAX_ACTIVE_JOBS` limits how many generations a user runs at the same time,
   not how much they cost. Give tokens only to people you trust with your credits, set a
@@ -101,8 +115,8 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   old jobs by hand (see [Cleaning up](DEPLOYMENT.md#cleaning-up)).
 - **Tokens in URLs.** A token given as `?token=` is kept wherever the URL is: the history
   of browsers and shells, an agent's configuration, the log of a proxy. Prefer the headers.
-- **The cookie holds the token itself** for 30 days. Logging out deletes it from the
-  browser, but the token stays valid until the administrator changes it.
+- **A leaked token** stays valid until the administrator gives its user a new one
+  (`reset-token`): logging out of the web page ends that browser's session, not the token.
 - **What the providers see.** Prompts and reference images go to the provider (and, through
   OpenRouter, to the company that runs the model), under its terms. PixDrop does not filter
   prompts or images; moderation is the provider's.
@@ -140,10 +154,10 @@ These are vulnerabilities:
 
 These are not:
 
-- With `FORWARDED_ALLOW_IPS=*`, addresses claimed in `CF-Connecting-IP` or
-  `X-Forwarded-For` when PixDrop's port can be reached without the proxy, or behind a proxy
-  that keeps the client's own `X-Forwarded-For`: see
-  [What is not protected](#what-is-not-protected).
+- Addresses claimed in `X-Forwarded-For` by a peer that `FORWARDED_ALLOW_IPS` trusts, and
+  with `FORWARDED_ALLOW_IPS=*`, addresses claimed in `CF-Connecting-IP` or `X-Forwarded-For`
+  when PixDrop's port can be reached without the proxy, or behind a proxy that keeps the
+  client's own `X-Forwarded-For`: see [What is not protected](#what-is-not-protected).
 - What a user can do with a valid token: generate images at the provider's expense, and
   fill the disk.
 - Tokens or transfer links read off a connection without HTTPS, or from URLs that carry

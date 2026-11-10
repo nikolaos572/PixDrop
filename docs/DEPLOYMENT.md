@@ -33,38 +33,68 @@ docker build --pull -t pixdrop .
 ```
 
 Rebuild now and then with `--pull`: that brings in the security fixes of Python and of the
-image libraries (Pillow, cairo).
+system libraries (cairo). The Python packages, Pillow among them, are pinned to exact
+versions in `requirements.txt`, so every build installs the same ones; they change with new
+versions of PixDrop (see [Updating dependencies](DEVELOPMENT.md#updating-dependencies)).
 
 ## Running
 
-The container runs as uid 1001, which must own the data directory:
-
 ```bash
-mkdir data
-sudo chown -R 1001:1001 data
-
-docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
+docker run -d --name pixdrop \
+  --restart unless-stopped \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -p 8000:8000 \
   -e TZ=Europe/Athens \
-  --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
+  -v pixdrop-data:/data \
   pixdrop
 
 docker exec -it pixdrop python -m pixdrop setup        # asks for your OpenRouter key, adds the default models
 docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](../compose.yaml), and the same two commands
-with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Until a user exists,
-the server refuses every request, and until `setup` has run it has no models.
-[CONFIGURATION.md](CONFIGURATION.md) has more on
+Until a user exists, the server refuses every request, and until `setup` has run it has no
+models. [CONFIGURATION.md](CONFIGURATION.md) has more on
 [the models](CONFIGURATION.md#providers-and-models), including how to add and remove them, and
-on [the users](CONFIGURATION.md#users). Everything the service stores
-is in the data directory, so the container can be removed and started again from a new
-image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
+on [the users](CONFIGURATION.md#users). Everything the service stores is in its data
+directory, the volume mounted at `/data`, so the container can be removed and started again
+from a new image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
+Mount it at `/data` and nowhere else: a volume mounted at another path stays empty, and the
+data ends up in an anonymous volume that a new container does not reuse.
+
+### A directory on the host
+
+The command above keeps the data in the named volume `pixdrop-data`, which Docker creates and
+gives to the container's user on first use (as root, `docker volume inspect -f
+'{{.Mountpoint}}' pixdrop-data` shows where it is). To keep the data in a directory of your
+choice instead, which the rest of these docs call `data/`, give it to the container's user
+first: uid and gid **61001**, a number that matches no account of the host (no user or group
+with that number needs to exist). Otherwise Docker creates the directory owned by root, and
+the server cannot write to it.
+
+```bash
+mkdir data
+sudo chown -R 61001:61001 data
+docker run ... -v "$PWD/data:/data" ... pixdrop
+```
+
+[`compose.yaml`](../compose.yaml) does this: `docker compose up -d`, then the same two
+commands with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Images
+before November 2026 ran as uid 1001: when you upgrade from one, give the data directory to
+61001 once, with the same `sudo chown -R`, before you start the new container. With rootless
+Docker or `userns-remap`, the host sees the container's ids shifted, so a `chown` on the host
+gives the wrong owner; give the directory to 61001 from inside a container instead:
+
+```bash
+docker run --rm --user 0 -v "$PWD/data:/data" pixdrop chown -R 61001:61001 /data
+```
+
+### Options
 
 `docker run` and compose are equivalent: `compose.yaml` only writes down the same options,
 and every setting is an environment variable, which `-e` sets as well. The image has its
-own init process (tini), which passes `docker stop` on to the server, so `--init` is not
-needed; `--cap-drop ALL` and `--security-opt no-new-privileges` are not needed either (the
+own init process (tini), which passes `docker stop` on to the server and reaps processes
+left behind in the container, so `--init`, which adds the same, is not needed (it does no
+harm either); `--cap-drop ALL` and `--security-opt no-new-privileges` are not needed either (the
 server runs as an unprivileged user and needs no capabilities), and add a layer at no cost.
 Only the command line (or `compose.yaml`) can give the port, the data directory, the
 restart policy (without `--restart`, the container stays stopped after a reboot) and the
@@ -82,7 +112,7 @@ Install Python 3.11+ and the cairo library (Debian/Ubuntu: `libcairo2`), which d
 reference images. Then, as an unprivileged user (best a dedicated one):
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install .
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt .   # the versions the image has
 mkdir -p ~/pixdrop-data
 DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop setup            # asks for your OpenRouter key, adds the default models
 DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop adduser alice    # prints alice's token
@@ -99,6 +129,7 @@ them.
 data/
 ├── config.json                            providers and models (python -m pixdrop setup creates this)
 ├── users.json                             users and tokens (python -m pixdrop adduser creates this)
+├── sessions.json                          the web page's sessions, as SHA-256 digests (the server writes this)
 ├── outputs/<user>/<id>.json               a job's record: its request, status and results
 ├── outputs/<user>/<id>.png                its image (.png, .jpg, .webp, .gif or .svg, after the format)
 ├── outputs/<user>/<id>_2.png              its further images, when it has several (_2, _3, ...)
@@ -314,29 +345,40 @@ matter:
 
 - **The address.** Set `PUBLIC_BASE_URL` to the address users reach, such as
   `https://pixdrop.example.com`, so that the URLs in jobs, the MCP server's address in Server
-  Info and the transfer links point there, whatever the proxy sends as `Host`. PixDrop must
+  Info and the transfer links point there, whatever the proxy sends as `Host`, and so that
+  browsers may send changes (a login, a generation) only from pages at exactly that address.
+  Without it, they may from pages of the host the request was sent to, which the proxy must
+  then pass on (nginx: `proxy_set_header Host $host;`). PixDrop must
   be served at the root of its address (a domain or subdomain of its own): the web page
   uses paths such as `/api/jobs`, so it cannot live under a path like
   `https://example.com/pixdrop/`, and a `PUBLIC_BASE_URL` with a path stops the server at
   startup.
 - **The client's address.** It is recorded with each job, logged, and binds the MCP
-  server's transfer links to the agent's computer. How PixDrop finds it depends on
-  `FORWARDED_ALLOW_IPS`:
-  - With `*` (the default: any peer may be a proxy), from the first address in
-    `X-Forwarded-For`, else from Cloudflare's `CF-Connecting-IP` header, else from the
-    connection. A proxy that sets `X-Forwarded-For` therefore decides, whatever
-    `CF-Connecting-IP` a client sends. Anyone who can reach PixDrop's port directly can
-    send these headers with any address, so **publish the port only to the proxy**: `-p
-    127.0.0.1:8000:8000` when the proxy runs on the same machine, or no `-p` at all when
-    the proxy is a container on the same Docker network. Have the proxy set
-    `X-Forwarded-For` to the client's address rather than add to the one the client sent
-    (nginx: `$remote_addr`, not `$proxy_add_x_forwarded_for`, as in the example below),
-    since the first address of the list is the one used.
-  - With the proxies' addresses (such as `172.17.0.1`, the Docker network's gateway, for a
-    proxy on the same machine), from `X-Forwarded-For` only when the request comes from one
-    of them, as uvicorn reads it (the last address in the list that is not one of the
-    proxies); other clients' headers are ignored, so they cannot claim another address.
-    `CF-Connecting-IP` is then not used.
+  server's transfer links to the agent's computer. PixDrop takes it from the proxy's
+  `X-Forwarded-For` header only in requests from the proxies that `FORWARDED_ALLOW_IPS`
+  names, and from the connection otherwise. The default, `127.0.0.1`, names a proxy on the
+  same machine when PixDrop runs without Docker. A container sees its proxy at another
+  address, so until you name the proxy, every request seems to come from it: the log shows
+  the proxy's address on every line. Set `FORWARDED_ALLOW_IPS` to that address:
+  - for a proxy on the same machine that forwards to the published port, usually
+    `172.17.0.1`, the gateway of Docker's default network;
+  - for a proxy in a container on the same Docker network, that network's subnet, such as
+    `172.18.0.0/16` (see `docker network inspect <network>`), since the proxy container's
+    own address can change.
+
+  uvicorn then takes the last address of `X-Forwarded-For` that is not one of the proxies,
+  and ignores the headers of every other client, so that no one can claim another address.
+  Separate several proxies or networks with commas; an entry that is not an IP address or
+  network stops the server at startup instead of being ignored, and the startup log says
+  whose `X-Forwarded-For` is used.
+
+  `*` trusts every peer instead: the client's address is then the first address in
+  `X-Forwarded-For`, else Cloudflare's `CF-Connecting-IP` header, else the connection's.
+  Anyone who can reach PixDrop's port directly can then claim any address, so use it only
+  when the port can be reached only through the proxy (`-p 127.0.0.1:8000:8000`, or no `-p`
+  with the proxy on the same Docker network), and have the proxy set `X-Forwarded-For` to the
+  client's address rather than add to the one the client sent (nginx: `$remote_addr`, not
+  `$proxy_add_x_forwarded_for`), since the first address of the list is the one used.
 - **The scheme.** The proxies of `FORWARDED_ALLOW_IPS` are also trusted for
   `X-Forwarded-Proto`: the server then knows that the client used HTTPS, marks the web
   page's cookie `Secure`, and, without `PUBLIC_BASE_URL`, hands out `https://` URLs.
@@ -370,17 +412,21 @@ server {
 ```bash
 docker run -d --name pixdrop -p 127.0.0.1:8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens -e PUBLIC_BASE_URL=https://pixdrop.example.com \
+  -e FORWARDED_ALLOW_IPS=172.17.0.1 \
   --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
   pixdrop
 ```
 
-Behind Cloudflare, `*` is not enough: Cloudflare adds the client's address at the end of
-an `X-Forwarded-For` the client sent, so the first address can be anything. Either put a
-proxy of your own behind Cloudflare that sets `X-Forwarded-For` from Cloudflare's
-`CF-Connecting-IP` (nginx: `proxy_set_header X-Forwarded-For $http_cf_connecting_ip;`) and
-accepts connections only from Cloudflare, or set `FORWARDED_ALLOW_IPS` to Cloudflare's
-address ranges ([cloudflare.com/ips](https://www.cloudflare.com/ips/), comma-separated), so
-that the address Cloudflare added is the one used.
+Publishing the port on `127.0.0.1` only also keeps anyone from going around the proxy.
+
+Behind Cloudflare, set `FORWARDED_ALLOW_IPS` to Cloudflare's address ranges
+([cloudflare.com/ips](https://www.cloudflare.com/ips/), comma-separated), so that the address
+Cloudflare adds to `X-Forwarded-For` is the one used; or put a proxy of your own behind
+Cloudflare, which accepts connections only from Cloudflare and sets `X-Forwarded-For` from
+its `CF-Connecting-IP` header (nginx: `proxy_set_header X-Forwarded-For
+$http_cf_connecting_ip;`), and name that proxy. `*` is not enough there: Cloudflare adds the
+client's address at the end of an `X-Forwarded-For` the client sent, so the first address
+can be anything.
 
 ## Container limits
 
@@ -454,7 +500,8 @@ Each line has the time (in the `TZ` time zone), the level and one event:
   answer) and the reason. Other successful reads are not logged, nor are medium-size
   downloads through the API: the web page repeats its reads every few seconds and loads the
   medium-size preview of every job it shows, and Docker repeats its health check every 30
-  seconds.
+  seconds. Behind a reverse proxy, the address is the proxy's until `FORWARDED_ALLOW_IPS`
+  names it (see [Reverse proxies](#reverse-proxies)).
 - One line per finished job: its model, the time the generation took, the number of images
   and the cost, or the error.
 - The providers' model catalogues: how many models each lists and how many configured

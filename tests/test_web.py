@@ -6,7 +6,7 @@ import re
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import ALICE, TOKENS, share
+from helpers import ALICE, TOKENS, login, share, write_json
 
 from pixdrop.web import CONTENT_SECURITY_POLICY, STATIC_DIR
 
@@ -33,21 +33,23 @@ def test_pages_show_the_login_page_without_a_valid_cookie(browser, path, page):
     response = browser.get(path)
     assert response.status_code == 200
     assert page_of(response) == "login.html"
-    stale = browser.get(path, headers={"Cookie": "pixdrop_token=revoked-token-0123456789"})
+    stale = browser.get(path, headers={"Cookie": "pixdrop_session=ended-session-0123456789"})
     assert page_of(stale) == "login.html"
+    # The cookie holds a session: a token there is no session.
+    assert page_of(browser.get(path, headers={"Cookie": f"pixdrop_session={TOKENS['alice']}"})) == "login.html"
     # A token elsewhere does not open a page: pages follow the cookie only.
     assert page_of(browser.get(path, headers=ALICE)) == "login.html"
 
 
 @pytest.mark.parametrize(("path", "page"), PAGES)
 def test_pages_with_the_cookie(browser, path, page):
-    response = browser.get(path, headers={"Cookie": f"pixdrop_token={TOKENS['alice']}"})
+    response = browser.get(path, headers={"Cookie": f"pixdrop_session={login(browser)}"})
     assert page_of(response) == page
 
 
 @pytest.mark.parametrize("path", ["/", "/stats", "/info"])
 def test_pages_forbid_what_they_do_not_need(browser, path):
-    for cookie in ("", f"pixdrop_token={TOKENS['alice']}"):
+    for cookie in ("", f"pixdrop_session={login(browser)}"):
         response = browser.get(path, headers={"Cookie": cookie} if cookie else {})
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert response.headers["Content-Security-Policy"] == CONTENT_SECURITY_POLICY
@@ -84,7 +86,7 @@ def test_login_sets_a_30_day_http_only_cookie(browser):
     response = browser.post("/api/session", json={"token": TOKENS["bob"]})
     assert (response.status_code, response.json()) == (200, {"user": "bob"})
     cookie = response.headers["set-cookie"]
-    assert cookie.startswith(f"pixdrop_token={TOKENS['bob']};")
+    assert re.match(r"pixdrop_session=[A-Za-z0-9_-]{43};", cookie)  # a session of 256 random bits, not the token
     for attribute in ("HttpOnly", "Max-Age=2592000", "Path=/", "SameSite=strict"):
         assert attribute in cookie
     assert "Secure" not in cookie  # plain HTTP; set over HTTPS
@@ -122,10 +124,43 @@ def test_logout_clears_the_cookie(browser, data_dir):
     response = browser.delete("/api/session")
     assert response.status_code == 204
     cookie = response.headers["set-cookie"]
-    assert cookie.startswith('pixdrop_token="";') and "Max-Age=0" in cookie
+    assert cookie.startswith('pixdrop_session="";') and "Max-Age=0" in cookie
     assert page_of(browser.get("/")) == "login.html"
     assert browser.get("/api/session").status_code == 401
     assert (data_dir / "users.json").exists()  # deletes nothing else
+
+
+def test_logout_ends_the_session_also_for_a_copy_of_the_cookie(browser, client):
+    copied = {"Cookie": f"pixdrop_session={login(browser)}"}
+    other = login(browser)  # the same user, in another browser
+    assert page_of(browser.get("/", headers=copied)) == "index.html"
+    assert browser.delete("/api/session", headers=copied).status_code == 204
+    assert page_of(browser.get("/", headers=copied)) == "login.html"
+    response = browser.get("/api/jobs", headers=copied)
+    assert (response.status_code, response.json()) == (401, {"detail": "the session ended or expired: log in again"})
+    assert page_of(browser.get("/", headers={"Cookie": f"pixdrop_session={other}"})) == "index.html"
+    assert client.get("/api/session").json() == {"user": "alice"}  # the token itself still works
+
+
+def test_a_new_token_ends_the_users_sessions(browser, data_dir):
+    alice, bob = login(browser, "alice"), login(browser, "bob")
+    write_json(data_dir / "users.json", {"users": {"alice": "alice-new-token-0123456789", "bob": TOKENS["bob"]}})
+    assert browser.get("/api/session", headers={"Cookie": f"pixdrop_session={alice}"}).status_code == 401
+    assert browser.get("/api/session", headers={"Cookie": f"pixdrop_session={bob}"}).json() == {"user": "bob"}
+
+
+def test_removing_a_user_ends_their_sessions(browser, data_dir):
+    alice = login(browser, "alice")
+    write_json(data_dir / "users.json", {"users": {"bob": TOKENS["bob"]}})
+    assert page_of(browser.get("/", headers={"Cookie": f"pixdrop_session={alice}"})) == "login.html"
+    write_json(data_dir / "users.json", {"users": TOKENS})  # back with the same token: the session was not ended
+    assert page_of(browser.get("/", headers={"Cookie": f"pixdrop_session={alice}"})) == "index.html"
+
+
+def test_sessions_survive_a_restart(browser, make_app):
+    alice = login(browser)
+    restarted = TestClient(make_app(), cookies={"pixdrop_session": alice})
+    assert restarted.get("/api/session").json() == {"user": "alice"}
 
 
 # --- static files ---

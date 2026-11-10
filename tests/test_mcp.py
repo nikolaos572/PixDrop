@@ -174,7 +174,12 @@ def test_links_work_only_from_the_address_that_asked_for_them(agent, client):
     assert agent.download(link).status_code == 200  # still valid where it belongs
 
 
-def test_behind_a_proxy_links_follow_the_forwarded_address(agent):
+def test_behind_a_proxy_links_follow_the_forwarded_address(make_app):
+    with TestClient(make_app(forwarded_allow_ips="*"), headers=dict(ALICE)) as client:  # every peer may be the proxy
+        _links_follow_the_forwarded_address(Agent(client, share(client)))
+
+
+def _links_follow_the_forwarded_address(agent: Agent) -> None:
     forwarded = {"X-Forwarded-For": "203.0.113.7"}
     result = agent.rpc("tools/call", {"name": "generate_image", "arguments": {"prompt": "a red fox"}}, headers=forwarded)
     link = downloads(result["result"]["structuredContent"])[1, "full"]

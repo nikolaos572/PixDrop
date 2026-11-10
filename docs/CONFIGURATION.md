@@ -33,9 +33,9 @@ statistics on the server, see [DEPLOYMENT.md](DEPLOYMENT.md#statistics-of-all-us
 
 A token is what its user logs in with on the web page, and what their scripts and agents
 send. `reset-token` is for a token that is lost or leaked: the old token stops working at
-once, so the user has to log in again and to give the new one to their scripts and agents.
-Both commands print the token alone on standard output and their message on standard error,
-so a script can write `token=$(docker exec pixdrop python -m pixdrop adduser alice)`. They
+once, and every browser logged in with it is logged out, so the user has to log in again and
+to give the new one to their scripts and agents. Both commands print the token alone on
+standard output and their message on standard error, so a script can write `token=$(docker exec pixdrop python -m pixdrop adduser alice)`. They
 exit with status 1, and change nothing, if the user already exists (`adduser`) or does not
 (`reset-token`), if the name is invalid, or if the file is invalid or cannot be written.
 
@@ -62,22 +62,22 @@ content stays in use. Without the file the server starts, logs a warning, and re
 request.
 
 The file `adduser` creates can be read only by its owner, as it holds secrets: the
-container's user, uid 1001, so use `sudo` to edit it on the host. A file that already exists
+container's user, uid 61001, so use `sudo` to edit it on the host. A file that already exists
 keeps its mode. It also keeps its owner if that is the user running the command, or if the
 command runs as root; otherwise the user running the command becomes its owner.
 
-The format is that of [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `config.json`, so
+The format is that of [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `users.json`, so
 one file can serve both services: point `USERS_FILE` at it, or mount it as
 `/data/users.json`:
 
 ```bash
-docker run ... -v /srv/texdrop/data/config.json:/data/users.json:ro ... pixdrop
+docker run ... -v /srv/texdrop/data/users.json:/data/users.json:ro ... pixdrop
 ```
 
 (Docker mounts the file itself: an editor that saves by writing a new file and renaming it
 leaves the container with the old one until it restarts.) The commands keep whatever else
 the file holds. They cannot change a file mounted with `:ro`, and say so: add the user where
-the file comes from, or mount it without `:ro`, for uid 1001 to write it.
+the file comes from, or mount it without `:ro`, for uid 61001 to write it.
 
 ## Providers and models
 
@@ -96,7 +96,7 @@ With Docker Compose, they start with `docker compose exec pixdrop` instead of
 **`setup`** asks for the key (without showing it), asks OpenRouter whether it accepts the key,
 and reads OpenRouter's catalogue to check that it still offers every default model. Only
 then does it write `config.json`, with the default models of
-[`default_config.json`](../src/pixdrop/default_config.json), and it shows what each one
+[`default_config.json`](../app/default_config.json), and it shows what each one
 accepts. If anything is wrong (the key is refused or is a management key, which cannot
 generate images, a default model is gone, OpenRouter cannot be reached), it says so, exits
 with status 1, and writes nothing. A script can pipe the key:
@@ -123,7 +123,7 @@ they follow what the provider offers.
 
 `data/config.json` says which image models users can choose, and how to reach them. You can
 also edit it by hand, or write it yourself: `setup` is not needed then, and
-[`default_config.json`](../src/pixdrop/default_config.json) is a good start. For each model
+[`default_config.json`](../app/default_config.json) is a good start. For each model
 it names the provider, the provider's id of the model and the API to call; what the model
 accepts (its options, their values, how many reference images) PixDrop reads from the
 provider's model catalogue:
@@ -478,7 +478,7 @@ with a message that names it (`cannot start: MAX_UPLOAD_MB must be at least 1, g
 | `DATA_DIR` | `/data` | Where the service keeps everything: the two configuration files, the jobs and their images, and the log. The Docker image uses the volume `/data`; without Docker, set it to a directory of your choice. |
 | `CONFIG_FILE` | `$DATA_DIR/config.json` | The [providers and models](#providers-and-models) file. |
 | `USERS_FILE` | `$DATA_DIR/users.json` | The [users](#users) file. |
-| `PUBLIC_BASE_URL` | (empty) | The address users reach the service at, such as `https://pixdrop.example.com`: the base of the URLs the server hands out (the images' URLs in jobs, the MCP server's address and its transfer links). Empty: the address each request came to. Set it behind a reverse proxy (see [DEPLOYMENT.md](DEPLOYMENT.md#reverse-proxies)). It is a scheme, a host name and optionally a port, without a path: PixDrop is served at the root of its address (a domain or subdomain of its own), not under a path such as `/pixdrop/`. A trailing `/` is ignored. |
+| `PUBLIC_BASE_URL` | (empty) | The address users reach the service at, such as `https://pixdrop.example.com`: the base of the URLs the server hands out (the images' URLs in jobs, the MCP server's address and its transfer links), and the only address whose pages a browser may send changes from (logins, uploads, ...): from any other, they are refused, so that other sites cannot forge them. Empty: the address each request came to, and pages of its host. Set it behind a reverse proxy (see [DEPLOYMENT.md](DEPLOYMENT.md#reverse-proxies)). It is a scheme, a host name and optionally a port, without a path: PixDrop is served at the root of its address (a domain or subdomain of its own), not under a path such as `/pixdrop/`. A trailing `/` is ignored. |
 | `TZ` | `UTC` | Time zone of the dates the API and the web page show, of the months in the statistics, and of the log (an IANA name such as `Europe/Athens`). Job records store UTC. |
 | `GENERATION_TIMEOUT_SECONDS` | `180` | A generation without an answer from the provider after this long fails. At least 10. |
 | `MAX_UPLOAD_MB` | `20` | Largest reference image, from 1 to 1024. |
@@ -486,7 +486,7 @@ with a message that names it (`cannot start: MAX_UPLOAD_MB must be at least 1, g
 | `MEDIUM_IMAGE_PX` | `512` | The longer side of the medium size of images, from 64 to 4096. |
 | `ENABLE_MCP` | `0` | Set to `1` to serve the [MCP server](MCP.md) at `/mcp`, through which AI agents (Claude Code, Codex, Antigravity, ...) use the service with a user's token, and its transfer links under `/api/links/`. |
 | `LINK_EXPIRY_MINUTES` | `60` | A transfer link of the MCP server stops working this long after it was made (it also stops once used). A job waiting for its reference images fails if they have not all arrived this long after it was made. At least 1. |
-| `FORWARDED_ALLOW_IPS` | `*` | IPs of the reverse proxies whose `X-Forwarded-Proto` and `X-Forwarded-For` headers are trusted: for the scheme of the request (`https` URLs and the cookie's `Secure` flag) and for the client's address. `*` trusts any peer: the client's address is then the first address of `X-Forwarded-For`, else Cloudflare's `CF-Connecting-IP`, else the connection's, so the port must be reachable only through the proxy. Naming the proxies (such as `172.17.0.1`) makes PixDrop take `X-Forwarded-For` only from them, and ignore `CF-Connecting-IP` (see [Reverse proxies](DEPLOYMENT.md#reverse-proxies)). |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Your reverse proxy's IP address or network, as the server sees it, such as `172.17.0.1` for a proxy on the Docker host or `172.18.0.0/16` for one on the same Docker network; several separated by commas. Their `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted: for the client's address (in the log, in the job records, and for the transfer links) and for the scheme (`https` URLs and the cookie's `Secure` flag). The headers of other peers are ignored, so that no one can claim another address; until you name the proxy, every request seems to come from it. `*` trusts any peer, and also Cloudflare's `CF-Connecting-IP`: then the port must be reachable only through the proxy. See [Reverse proxies](DEPLOYMENT.md#reverse-proxies). |
 | `HOST`, `PORT` | `0.0.0.0`, `8000` | Where the server listens. With Docker, publish the port with `-p` instead; the image's health check follows `PORT` should you change it (with `--network host`, say). |
 
 The flags take `1`, `true` or `yes`, and `0`, `false` or `no`.

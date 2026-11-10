@@ -295,13 +295,10 @@ or WebSockets. What matters is what matters for the rest of the service (see
 
 - **`PUBLIC_BASE_URL`** should be the address agents connect to, such as
   `https://pixdrop.example.com`, so that the links' URLs start with it.
-- **The client's address** binds the links. With `FORWARDED_ALLOW_IPS=*` (the default),
-  PixDrop takes it from the first address of `X-Forwarded-For`, else from
-  `CF-Connecting-IP`, which anyone who reaches PixDrop's port directly can set: publish the
-  port only to the proxy (or name the proxies in `FORWARDED_ALLOW_IPS`), and have the proxy
-  set `X-Forwarded-For` to the client's address (nginx:
-  `proxy_set_header X-Forwarded-For $remote_addr;`). Without a proxy header, every request
-  seems to come from the proxy, and links would work for any client of the proxy.
+- **The client's address** binds the links. **`FORWARDED_ALLOW_IPS` must name the proxy**,
+  as the container sees it (often `172.17.0.1`), so that PixDrop takes each client's address
+  from the proxy's `X-Forwarded-For`. Until then, every request seems to come from the proxy,
+  and links would work for any client of the proxy.
 - **Timeouts and sizes.** The tools answer within 50 seconds, below nginx's default limit
   of 60. Uploads through links carry the reference images: raise the proxy's limit on
   request bodies (`client_max_body_size` for nginx, 1 MB by default) to what agents upload.
@@ -320,6 +317,11 @@ an IPv6) address, or by connecting the agent to the same address `curl` uses.
 **Tool calls are refused with `401`.** The token is missing or wrong: check the header (or
 `?token=`) in the agent's configuration, and that the variable it reads (`PIXDROP_TOKEN`)
 is set where the agent starts.
+
+**Tool calls are refused with `403`** (*the request came from a page at ...*). The MCP
+client runs in a web page, such as a browser-based inspector, and its browser sends that
+page's address in an `Origin` header: PixDrop refuses changes from pages of other sites (see
+[Security](SECURITY.md)). Use a client that runs outside the browser, as agents do.
 
 ## Security
 

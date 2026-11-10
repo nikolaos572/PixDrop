@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .auth import COOKIE_MAX_AGE, COOKIE_NAME, current_user, registry
+from .auth import COOKIE_MAX_AGE, COOKIE_NAME, current_user, registry, sessions
 
 STATIC_DIR = Path(__file__).parent / "static"
 CONTENT_SECURITY_POLICY = (
@@ -43,9 +43,9 @@ def info(request: Request) -> FileResponse:
 
 
 def _page(request: Request, name: str) -> FileResponse:
-    """The named page, or the login page if the browser has no valid token."""
-    token = request.cookies.get(COOKIE_NAME)
-    page = name if token and registry(request).authenticate(token) else "login.html"
+    """The named page, or the login page if the browser has no valid session."""
+    session_id = request.cookies.get(COOKIE_NAME)
+    page = name if session_id and sessions(request).user(session_id) else "login.html"
     return FileResponse(
         STATIC_DIR / page,
         media_type="text/html; charset=utf-8",
@@ -55,14 +55,15 @@ def _page(request: Request, name: str) -> FileResponse:
 
 @router.post("/api/session", tags=["web"])
 def login(body: Login, request: Request, response: Response) -> SessionOut:
-    """Check a token and store it in an HTTP-only cookie for 30 days."""
+    """Check a token and start a session of 30 days, kept in an HTTP-only cookie (which holds
+    the session, not the token)."""
     user = registry(request).authenticate(body.token)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token")
     request.state.user = user  # for the access log
     response.set_cookie(
         COOKIE_NAME,
-        body.token,
+        sessions(request).start(user, body.token),
         max_age=COOKIE_MAX_AGE,
         httponly=True,
         samesite="strict",
@@ -77,6 +78,9 @@ def session(user: str = Depends(current_user)) -> SessionOut:
 
 
 @router.delete("/api/session", status_code=status.HTTP_204_NO_CONTENT, tags=["web"])
-def logout(response: Response) -> None:
-    """Log out of the web page (forgets the cookie; deletes nothing else)."""
-    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="strict")
+def logout(request: Request, response: Response) -> None:
+    """Log out of the web page: end the session on the server, so that its cookie stops working
+    also where it was copied, and delete the cookie (nothing else is deleted)."""
+    if (session_id := request.cookies.get(COOKIE_NAME)) and (user := sessions(request).end(session_id)):
+        request.state.user = user  # for the access log
+    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="strict", secure=request.url.scheme == "https")

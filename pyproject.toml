@@ -25,10 +25,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9",
+    "packaging>=24",  # tests/test_dependencies.py
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["pixdrop"]
+package-dir = {"pixdrop" = "app"}  # the pixdrop package lives in app/
 
 [tool.setuptools.package-data]
 pixdrop = ["static/*", "default_config.json"]

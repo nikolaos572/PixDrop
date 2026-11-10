@@ -5,7 +5,7 @@ import logging
 import threading
 
 import pytest
-from helpers import TOKENS, Clock, access_lines, generate, gif, png, reference, size_of, submit, wait_for, write_json
+from helpers import TOKENS, Clock, access_lines, generate, gif, png, reference, share, size_of, submit, wait_for, write_json
 
 from pixdrop.links import REFUSAL, Link, LinkRefused, LinkService, Target
 
@@ -258,7 +258,7 @@ def test_every_refusal_gets_the_same_answer(client, anonymous, app, data_dir, ca
         anonymous.get("/api/links/never-made"),
         anonymous.get(used),
         anonymous.get(elsewhere),  # made for another address
-        anonymous.get(download, headers={"X-Forwarded-For": "10.0.0.9"}),  # used from another address
+        share(client, client=("10.0.0.9", 50000)).get(download),  # used from another address
         anonymous.get(upload),  # an upload link, for a download
         anonymous.post(download, files=[reference("a.png", png())]),  # a download link, for an upload
     ]
