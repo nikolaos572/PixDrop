@@ -16,7 +16,7 @@ async function request(path, options = {}) {
     throw new Error("The server cannot be reached.");
   }
   if (response.status === 401) {
-    location.reload(); // token revoked or cookie expired: back to the login page
+    location.reload(); // logged out, session expired or token changed: back to the login page
     throw new Error("Session expired.");
   }
   if (!response.ok) throw new Error(await errorDetail(response));
