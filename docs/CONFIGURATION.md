@@ -66,12 +66,12 @@ container's user, uid 1001, so use `sudo` to edit it on the host. A file that al
 keeps its mode. It also keeps its owner if that is the user running the command, or if the
 command runs as root; otherwise the user running the command becomes its owner.
 
-The format is that of [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `config.json`, so
+The format is that of [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `users.json`, so
 one file can serve both services: point `USERS_FILE` at it, or mount it as
 `/data/users.json`:
 
 ```bash
-docker run ... -v /srv/texdrop/data/config.json:/data/users.json:ro ... pixdrop
+docker run ... -v /srv/texdrop/data/users.json:/data/users.json:ro ... pixdrop
 ```
 
 (Docker mounts the file itself: an editor that saves by writing a new file and renaming it

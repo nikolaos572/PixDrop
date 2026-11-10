@@ -68,7 +68,7 @@ stops working at once, in the browser and in the user's scripts and agents alike
 [the users](docs/CONFIGURATION.md#users), also for removing a user.)
 
 The commands keep the users in `data/users.json`, which can also be edited by hand, in the
-same format as [TeXdrop](https://github.com/nikolaos572/texdrop)'s `config.json` (one file
+same format as [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `users.json` (one file
 can serve both). `data/config.json` has the providers, with their keys, and the models: for
 each one only the provider, its id at OpenRouter and `"api_type": "images"`. It can be edited
 by hand too: to keep the key out of the file, write `"api_key_env": "OPENROUTER_API_KEY"`

@@ -18,7 +18,7 @@ def test_parse_valid_users():
 
 
 def test_the_same_file_serves_texdrop():
-    # TeXdrop's config.json is {"users": {...}}: PixDrop reads the same document.
+    # TeXdrop's users.json is {"users": {...}}: PixDrop reads the same document.
     assert parse_users({"users": {"alice": GOOD_TOKEN}}) == {GOOD_TOKEN: "alice"}
 
 
