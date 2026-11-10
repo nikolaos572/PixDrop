@@ -216,6 +216,18 @@ def test_the_real_server_generates_logs_and_fails_what_it_interrupts(real_data):
     assert "fake-key" not in log  # the provider's key
 
 
+def test_the_server_cannot_gain_privileges(data_dir):
+    # As Docker's no-new-privileges does: setuid programs that the server (or a helper it starts)
+    # might run give it nothing, also under a plain docker run.
+    server = start_server(data_dir, free_port())
+    try:
+        with open(f"/proc/{server.pid}/status", encoding="ascii") as status:
+            assert "NoNewPrivs:\t1\n" in status.read()
+    finally:
+        server.send_signal(signal.SIGTERM)
+        server.communicate(timeout=30)
+
+
 def test_behind_a_named_proxy_the_client_comes_from_its_header_only(data_dir):
     port = free_port()
     server = start_server(data_dir, port, FORWARDED_ALLOW_IPS="127.0.0.1")  # this test is the trusted proxy

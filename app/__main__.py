@@ -22,6 +22,7 @@
 """
 
 import argparse
+import ctypes
 import json
 import logging
 import os
@@ -46,6 +47,8 @@ from .storage import Storage
 from .store import JobStore
 
 log = logging.getLogger(__name__)
+
+_PR_SET_NO_NEW_PRIVS = 38  # from <linux/prctl.h>
 
 # At shutdown, requests still running after this long (a client waiting with ?wait=, say)
 # are cut off, so that the server stops before docker stop kills it (after 10 seconds).
@@ -93,6 +96,7 @@ def serve() -> None:
     log.info("PixDrop %s starting, data in %s", __version__, Settings.data_dir_from_env())
     try:
         settings = Settings.from_env()
+        forbid_new_privileges()  # for the server and everything it starts, also under a plain docker run
         app = create_app(settings)
     except (SettingsError, ConfigError) as exc:
         log.error("cannot start: %s", exc)
@@ -112,6 +116,17 @@ def serve() -> None:
         access_log=False,
         timeout_graceful_shutdown=SHUTDOWN_SECONDS,
     )
+
+
+def forbid_new_privileges() -> None:
+    """Make this process and its future children unable to gain privileges, through setuid
+    programs or file capabilities, as Docker's no-new-privileges option does (TeXdrop does the
+    same for its sandbox)."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    unused = [ctypes.c_ulong(0)] * 3  # must be 0
+    if libc.prctl(ctypes.c_int(_PR_SET_NO_NEW_PRIVS), ctypes.c_ulong(1), *unused) != 0:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code))
 
 
 def print_new_token(change: Callable[[Path, str], str], name: str, done: str) -> int:

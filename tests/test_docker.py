@@ -657,7 +657,8 @@ def test_a_plain_docker_run_needs_no_options(image, data, init):
     # No --cap-drop, --security-opt or --init: the image itself provides what they would.
     server = Server(image, data, *init, hardened=False)
     try:
-        assert "CapEff:\t0000000000000000" in docker("exec", server.container, "python", "-c", SERVER_STATUS)
+        status = docker("exec", server.container, "python", "-c", SERVER_STATUS)
+        assert "NoNewPrivs:\t1" in status and "CapEff:\t0000000000000000" in status
         docker("exec", server.container, "sh", "-c", "sleep 1 & exit")  # leaves an orphan, reparented to process 1
         time.sleep(2)
         assert ") Z " not in docker("exec", server.container, "sh", "-c", "cat /proc/[0-9]*/stat")  # no zombie

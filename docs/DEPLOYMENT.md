@@ -91,12 +91,13 @@ docker run --rm --user 0 -v "$PWD/data:/data" pixdrop chown -R 61001:61001 /data
 ### Options
 
 `docker run` and compose are equivalent: `compose.yaml` only writes down the same options,
-and every setting is an environment variable, which `-e` sets as well. The image has its
-own init process (tini), which passes `docker stop` on to the server and reaps processes
-left behind in the container, so `--init`, which adds the same, is not needed (it does no
-harm either); `--cap-drop ALL` and `--security-opt no-new-privileges` are not needed either (the
-server runs as an unprivileged user and needs no capabilities), and add a layer at no cost.
-Only the command line (or `compose.yaml`) can give the port, the data directory, the
+and every setting is an environment variable, which `-e` sets as well. Safety does not
+depend on extra options either: the image has its own init process (tini), which passes
+`docker stop` on to the server and reaps processes left behind in the container, the server
+runs as an unprivileged user and needs no capabilities, and it makes itself and everything it
+starts unable to gain privileges. `--init` (which adds the same init process), `--cap-drop
+ALL` and `--security-opt no-new-privileges` are therefore not needed; they do no harm, and
+the last two add a second layer at no cost. Only the command line (or `compose.yaml`) can give the port, the data directory, the
 restart policy (without `--restart`, the container stays stopped after a reboot) and the
 [container's limits](#container-limits).
 
