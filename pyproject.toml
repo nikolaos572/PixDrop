@@ -25,6 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9",
+    "packaging>=24",  # tests/test_dependencies.py
 ]
 
 [tool.setuptools.packages.find]

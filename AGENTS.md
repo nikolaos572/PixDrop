@@ -11,7 +11,7 @@ Python 3.11+, no database (one JSON record per job, next to its images), no fron
 - `docs/`: deployment, configuration (every setting), API, MCP, security, development.
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # needs the cairo library
+python -m venv .venv && .venv/bin/pip install -r requirements.txt -e ".[dev]"   # needs the cairo library
 .venv/bin/python -m pytest -m "not docker"                  # unit and integration tests
 .venv/bin/python -m pytest -m docker                         # the Docker image
 ```

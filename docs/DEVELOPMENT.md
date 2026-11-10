@@ -49,7 +49,7 @@ but `rejected-key`. Start it, and point a provider at it by hand, since `setup` 
 OpenRouter's address and models:
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # needs the cairo library (Debian: libcairo2)
+python -m venv .venv && .venv/bin/pip install -r requirements.txt -e ".[dev]"   # needs the cairo library (Debian: libcairo2)
 .venv/bin/python tests/fake_provider.py --port 9000 &        # fake provider at http://127.0.0.1:9000/api/v1
 
 mkdir -p data
@@ -77,14 +77,36 @@ error paths: `FAIL` (an error status), `FAIL200` (an error in an answer with sta
 ## Tests
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # needs the cairo library (Debian: libcairo2)
+python -m venv .venv && .venv/bin/pip install -r requirements.txt -e ".[dev]"   # needs the cairo library (Debian: libcairo2)
 .venv/bin/python -m pytest -m "not docker"                  # unit and integration tests
 .venv/bin/python -m pytest -m docker                         # builds the image and tests the container
 ```
 
-The tests never reach a real provider: the unit and integration tests replace the network
-with a fake transport, and the Docker tests run the containers against
-`tests/fake_provider.py`, which they reach through the host's gateway. Set `TEST_IMAGE` to
-test an existing image instead of building one. The GitHub workflows are started manually:
-**Run Test Suite** runs both test groups, and **Build and Export Docker Image** builds the
-image and saves it as an artifact.
+`requirements.txt` holds the exact versions the Docker image installs, so installing it with
+the project runs the code and the tests on the same packages that ship. The tests never
+reach a real provider: the unit and integration tests replace the network with a fake
+transport, and the Docker tests run the containers against `tests/fake_provider.py`, which
+they reach through the host's gateway. Set `TEST_IMAGE` to test an existing image instead of
+building one. The GitHub workflows are started manually: **Run Test Suite** runs both test
+groups, and **Build and Export Docker Image** builds the image and saves it as an artifact.
+
+## Updating dependencies
+
+`pyproject.toml` lists the versions PixDrop accepts. `requirements.txt` pins the exact version
+of every package the image installs, the indirect ones and setuptools (which builds PixDrop)
+included; the image installs only that list, and its build fails if the list is incomplete
+(`tests/test_dependencies.py` also checks that it fits `pyproject.toml`). To move to newer
+versions, change a range in `pyproject.toml` if needed, and make the list again in the Python
+of the image:
+
+```bash
+docker run --rm -v "$PWD":/src:ro python:3.13-slim sh -c '
+  mkdir /tmp/p && cp -r /src/pyproject.toml /src/README.md /src/src /tmp/p && python -m venv /tmp/v &&
+  /tmp/v/bin/pip install -q --disable-pip-version-check --root-user-action=ignore setuptools &&
+  /tmp/v/bin/pip install -q --disable-pip-version-check --root-user-action=ignore --no-build-isolation /tmp/p &&
+  { grep "^#" /src/requirements.txt; /tmp/v/bin/pip freeze --all --exclude pip --exclude pixdrop; }' > requirements.new
+mv requirements.new requirements.txt
+```
+
+Then reinstall (`.venv/bin/pip install -r requirements.txt -e ".[dev]"`) and run both test
+groups, Docker included, before committing the new list.

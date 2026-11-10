@@ -33,7 +33,9 @@ docker build --pull -t pixdrop .
 ```
 
 Rebuild now and then with `--pull`: that brings in the security fixes of Python and of the
-image libraries (Pillow, cairo).
+system libraries (cairo). The Python packages, Pillow among them, are pinned to exact
+versions in `requirements.txt`, so every build installs the same ones; they change with new
+versions of PixDrop (see [Updating dependencies](DEVELOPMENT.md#updating-dependencies)).
 
 ## Running
 
@@ -94,7 +96,7 @@ Install Python 3.11+ and the cairo library (Debian/Ubuntu: `libcairo2`), which d
 reference images. Then, as an unprivileged user (best a dedicated one):
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install .
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt .   # the versions the image has
 mkdir -p ~/pixdrop-data
 DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop setup            # asks for your OpenRouter key, adds the default models
 DATA_DIR=~/pixdrop-data .venv/bin/python -m pixdrop adduser alice    # prints alice's token
