@@ -36,7 +36,6 @@ docker build -t pixdrop .
 
 docker run -d --name pixdrop \
   --restart unless-stopped \
-  --cap-drop ALL --security-opt no-new-privileges \
   -p 8000:8000 \
   -e TZ=Europe/Athens \
   -v pixdrop-data:/data \
@@ -47,7 +46,9 @@ docker exec pixdrop python -m pixdrop adduser alice   # prints alice's token
 ```
 
 Then open `http://your-host:8000` and log in with the token. `--restart unless-stopped`
-starts PixDrop again after a crash or a reboot. Add users the same way, at any time;
+starts PixDrop again after a crash or a reboot. Extra hardening (`--cap-drop ALL`,
+`--security-opt no-new-privileges`) and other options are in
+[Deployment](docs/DEPLOYMENT.md#options). Add users the same way, at any time;
 `python -m pixdrop reset-token alice` gives alice a new token if theirs is lost or leaked.
 To let AI agents use PixDrop, add `-e ENABLE_MCP=1` and connect them as
 [MCP.md](docs/MCP.md#connecting-an-agent) shows.

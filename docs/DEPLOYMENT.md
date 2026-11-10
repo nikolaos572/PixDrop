@@ -95,11 +95,13 @@ and every setting is an environment variable, which `-e` sets as well. Safety do
 depend on extra options either: the image has its own init process (tini), which passes
 `docker stop` on to the server and reaps processes left behind in the container, the server
 runs as an unprivileged user and needs no capabilities, and it makes itself and everything it
-starts unable to gain privileges. `--init` (which adds the same init process), `--cap-drop
-ALL` and `--security-opt no-new-privileges` are therefore not needed; they do no harm, and
-the last two add a second layer at no cost. Only the command line (or `compose.yaml`) can give the port, the data directory, the
-restart policy (without `--restart`, the container stays stopped after a reboot) and the
-[container's limits](#container-limits).
+starts unable to gain privileges. `--init` (which adds the same init process), `--cap-drop ALL`
+and `--security-opt no-new-privileges` are therefore not needed, and they do no harm. The last
+two add a second layer at no cost, as in the commands of these docs and in `compose.yaml`:
+they also cover the commands you start with `docker exec`, which the server's own setting
+does not reach. Only the command line (or `compose.yaml`) can give the port, the data
+directory, the restart policy (without `--restart`, the container stays stopped after a
+reboot) and the [container's limits](#container-limits).
 
 Use HTTPS (a reverse proxy in front of the service) when it is reachable beyond a trusted
 network; it works without settings, and better with `PUBLIC_BASE_URL` (see
