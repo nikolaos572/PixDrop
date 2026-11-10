@@ -1,5 +1,5 @@
 # Example deployment: docker compose up -d
-# Before the first start: mkdir data && sudo chown -R 1001:1001 data
+# Before the first start: mkdir data && sudo chown -R 61001:61001 data
 # After it, set up the models: docker compose exec pixdrop python -m pixdrop setup, which asks for your OpenRouter key,
 # and add users: docker compose exec pixdrop python -m pixdrop adduser <name>, which prints their token.
 services:

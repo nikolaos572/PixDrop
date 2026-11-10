@@ -66,7 +66,7 @@ def provider_port() -> int:
 def data(tmp_path: Path, image: str, provider_port: int):
     data = tmp_path / "data"
     data.mkdir()
-    data.chmod(0o777)  # the container runs as uid 1001
+    data.chmod(0o777)  # the container runs as uid 61001
     (data / "users.json").write_text(json.dumps({"users": {"tester": TOKEN}}))
     (data / "config.json").write_text(
         json.dumps(
@@ -86,9 +86,9 @@ def data(tmp_path: Path, image: str, provider_port: int):
 
 
 class Server:
-    """A container of the image, serving a data directory from the host."""
+    """A container of the image, serving a data directory from the host (or a named volume)."""
 
-    def __init__(self, image: str, data: Path, *options: str, hardened: bool = True) -> None:
+    def __init__(self, image: str, data: Path | str, *options: str, hardened: bool = True) -> None:
         self.container = docker(
             "run", "--detach", "--publish", "127.0.0.1::8000", "--volume", f"{data}:/data",
             "--add-host", "host.docker.internal:host-gateway", "--env", "TZ=Europe/Athens",
@@ -127,9 +127,60 @@ def server(image: str, data: Path):
     server.stop()
 
 
+PROCESS_OWNERS = """
+import os
+for pid in filter(str.isdigit, os.listdir("/proc")):
+    try:
+        owner = os.stat(f"/proc/{pid}")
+    except FileNotFoundError:  # ended meanwhile
+        continue
+    print(f"{owner.st_uid}:{owner.st_gid}")
+"""
+
+
 def test_runs_as_an_unprivileged_user(server):
-    assert docker("exec", server.container, "id", "-u") == "1001"
-    assert docker("inspect", "--format", "{{.Config.User}}", server.container) == "app"
+    assert docker("exec", server.container, "id", "-u") == "61001"
+    assert docker("inspect", "--format", "{{.Config.User}}", server.container) == "61001:61001"
+    # Every process, the init process too: never root, nor a usual login of the host such as uid 1000.
+    assert set(docker("exec", server.container, "python", "-c", PROCESS_OWNERS).split()) == {"61001:61001"}
+
+
+def test_a_named_volume_needs_no_preparation(image):
+    volume = docker("volume", "create")
+    try:
+        server = Server(image, volume)
+        try:
+            assert docker("exec", server.container, "stat", "-c", "%u:%g", "/data") == "61001:61001"
+            added = manage(server.container, "adduser", "nikos")
+            assert added.returncode == 0, added.stderr
+            assert session_of(server, added.stdout.strip()) == 200
+        finally:
+            server.stop()
+    finally:
+        subprocess.run(["docker", "volume", "rm", volume], check=False, capture_output=True)
+
+
+def test_a_host_directory_given_to_61001_works(image, tmp_path):
+    """The preparation docs/DEPLOYMENT.md describes for a host directory, without chmod 777."""
+    data = tmp_path / "host-data"
+    data.mkdir()
+
+    def as_root(*command: str) -> None:
+        subprocess.run(["docker", "run", "--rm", "--user", "0", "--volume", f"{data}:/data", image, *command], check=True)
+
+    try:
+        as_root("chown", "61001:61001", "/data")  # the form that also works with rootless Docker
+        server = Server(image, data)
+        try:
+            added = manage(server.container, "adduser", "nikos")
+            assert added.returncode == 0, added.stderr
+            assert session_of(server, added.stdout.strip()) == 200
+            owners = docker("exec", server.container, "stat", "-c", "%u:%g", "/data/users.json", "/data/logs/server.log")
+            assert owners.split() == ["61001:61001", "61001:61001"]
+        finally:
+            server.stop()
+    finally:
+        as_root("chown", "-R", f"{os.getuid()}:{os.getgid()}", "/data")  # for pytest to remove it
 
 
 def test_web_ui_and_auth(server):
@@ -159,7 +210,7 @@ def test_generates_from_references_and_serves_both_sizes(server, data):
     user_dir = data / "outputs" / "tester"
     record = json.loads((user_dir / f"{job['id']}.json").read_text())
     assert record["status"] == "completed" and record["images"][0]["filename"] == f"{job['id']}.png"
-    assert (user_dir / f"{job['id']}.png").stat().st_uid == 1001
+    assert (user_dir / f"{job['id']}.png").stat().st_uid == 61001
     assert sorted(path.name for path in (user_dir / f"{job['id']}_reference").iterdir()) == ["1_front.png", "2_logo.svg"]
 
 
@@ -299,7 +350,7 @@ def test_users_are_managed_while_the_server_runs(image, data):
         first = added.stdout.strip()
         assert session_of(server, first) == 200
         written = (data / "users.json").stat()
-        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (61001, 0o600)
 
         reset = manage(server.container, "reset-token", "nikos")
         assert reset.returncode == 0, reset.stderr
@@ -446,7 +497,7 @@ def test_setup_and_modify_models_in_a_terminal(image, data, fake_defaults):
         assert "sk-first-key" not in terminal.output
         assert "with 2 models" in terminal.output and "reference images 0-4; options: aspect_ratio, quality" in terminal.output
         written = config.stat()
-        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (1001, 0o600)
+        assert (written.st_uid, stat.S_IMODE(written.st_mode)) == (61001, 0o600)
 
         # The server follows, without a restart: the models at once, and their options from the catalogue.
         assert server.generate("a first picture")["status"] == "completed"

@@ -37,11 +37,12 @@ image libraries (Pillow, cairo).
 
 ## Running
 
-The container runs as uid 1001, which must own the data directory:
+The container runs as uid and gid 61001, which must own the data directory (no user or group
+with that number needs to exist on the host):
 
 ```bash
 mkdir data
-sudo chown -R 1001:1001 data
+sudo chown -R 61001:61001 data
 
 docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens \
@@ -60,6 +61,16 @@ the server refuses every request, and until `setup` has run it has no models.
 on [the users](CONFIGURATION.md#users). Everything the service stores
 is in the data directory, so the container can be removed and started again from a new
 image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
+
+Images before November 2026 ran as uid 1001: when you upgrade from one, give the data
+directory to 61001 once (the same `sudo chown -R 61001:61001 data`) before you start the new
+container. With rootless Docker or `userns-remap`, the host sees the container's ids shifted,
+so a `chown` on the host gives the wrong owner; give the directory to 61001 from inside a
+container instead:
+
+```bash
+docker run --rm --user 0 -v "$PWD/data:/data" pixdrop chown -R 61001:61001 /data
+```
 
 `docker run` and compose are equivalent: `compose.yaml` only writes down the same options,
 and every setting is an environment variable, which `-e` sets as well. The image has its

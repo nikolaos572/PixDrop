@@ -62,7 +62,7 @@ content stays in use. Without the file the server starts, logs a warning, and re
 request.
 
 The file `adduser` creates can be read only by its owner, as it holds secrets: the
-container's user, uid 1001, so use `sudo` to edit it on the host. A file that already exists
+container's user, uid 61001, so use `sudo` to edit it on the host. A file that already exists
 keeps its mode. It also keeps its owner if that is the user running the command, or if the
 command runs as root; otherwise the user running the command becomes its owner.
 
@@ -77,7 +77,7 @@ docker run ... -v /srv/texdrop/data/users.json:/data/users.json:ro ... pixdrop
 (Docker mounts the file itself: an editor that saves by writing a new file and renaming it
 leaves the container with the old one until it restarts.) The commands keep whatever else
 the file holds. They cannot change a file mounted with `:ro`, and say so: add the user where
-the file comes from, or mount it without `:ro`, for uid 1001 to write it.
+the file comes from, or mount it without `:ro`, for uid 61001 to write it.
 
 ## Providers and models
 

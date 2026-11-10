@@ -35,7 +35,7 @@ through its MCP server and by programs through its HTTP API, and also has a web 
 docker build -t pixdrop .
 
 mkdir data
-sudo chown -R 1001:1001 data                 # the container runs as uid 1001
+sudo chown -R 61001:61001 data               # the container runs as uid 61001
 
 docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
   -e TZ=Europe/Athens \

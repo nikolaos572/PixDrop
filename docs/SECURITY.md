@@ -72,8 +72,11 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   address that asked for it, for one complete transfer, and for `LINK_EXPIRY_MINUTES`.
   Every refusal gets the same `404`; the server keeps only the secrets' SHA-256 and never
   logs them. It is off unless `ENABLE_MCP=1`.
-- **The container** runs as the unprivileged user `app` (uid 1001), never as root, and
-  needs no capabilities; the image has an init process (tini).
+- **The container** runs as the unprivileged user `app`, uid and gid 61001, never as root,
+  and needs no capabilities; the image has an init process (tini). The number is above the
+  range Linux gives to real accounts (up to 60000), so it matches no login of the host: should
+  someone break out of the container, they would hold an id that owns nothing there, rather
+  than one such as uid 1000, which often has passwordless `sudo`.
 
 ## What is not protected
 
