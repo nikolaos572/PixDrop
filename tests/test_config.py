@@ -11,7 +11,7 @@ from helpers import API_KEY, BASE_URL, CONFIG, config_with, touch, write_json
 from pixdrop.config import OPENROUTER_URL, OPTIONS, ModelRegistry, parse_config
 from pixdrop.errors import ConfigError, InvalidInput
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "pixdrop" / "default_config.json"
+EXAMPLE = Path(__file__).parent.parent / "app" / "default_config.json"
 
 
 def provider(**fields):

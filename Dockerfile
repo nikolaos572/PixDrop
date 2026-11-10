@@ -20,7 +20,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN python -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir --no-deps -r requirements.txt
 COPY pyproject.toml README.md ./
-COPY src ./src
+COPY app ./app
 RUN /opt/venv/bin/pip install --no-cache-dir --no-deps --no-build-isolation . && /opt/venv/bin/pip check
 
 ENV PATH=/opt/venv/bin:$PATH \

@@ -4,7 +4,7 @@ PixDrop is a FastAPI service that generates images through OpenRouter-compatible
 providers, for people (a web page), scripts (a JSON API) and AI agents (an MCP server).
 Python 3.11+, no database (one JSON record per job, next to its images), no frontend build step.
 
-- `src/pixdrop/`: one module per concern, each starting with a docstring that says what
+- `app/`: one module per concern, each starting with a docstring that says what
   it does; `static/` is the web page (plain HTML, CSS and JavaScript).
 - `tests/`: pytest, with the providers faked (`tests/fake_provider.py`); `test_docker.py`
   builds the image and tests the container.

@@ -22,8 +22,8 @@ waiting requests), the deadlines of pending jobs, the transfer links and the med
 renders, and the providers' model catalogues, which a background task reads at startup
 and every 6 hours. At startup, jobs a restart interrupted are marked failed.
 
-The code is in `src/pixdrop/`, one module per concern, each starting with a docstring that
-says what it does: `settings`, `users` (tokens), `watched` (the configuration files,
+The code is the `pixdrop` package in `app/`, one module per concern, each starting with a
+docstring that says what it does: `settings`, `users` (tokens), `watched` (the configuration files,
 re-read when they change), `config` (providers, models and the options), `discovery`
 (the providers' model catalogues, which give the models' options), `client` (the client's
 address), `auth`, `sessions` (the web page's logins), `storage` (file layout), `store` (job
@@ -34,7 +34,7 @@ lifecycle), `worker` (the generations), `links` (transfer links), `stats`, `api`
 `errors`, `app` (wiring), `accounts` (the commands' changes to the users file), `configure`
 (those to `config.json`, with `default_config.json`, the default models) and `__main__` (the
 server, and the `setup`, `modify-models`, `adduser`, `reset-token`, `stats` and `models`
-commands). The web page is plain HTML, CSS and JavaScript in `src/pixdrop/static/`, with no
+commands). The web page is plain HTML, CSS and JavaScript in `app/static/`, with no
 build step. What keeps users apart is described in [SECURITY.md](SECURITY.md).
 
 ## Running it locally
@@ -101,7 +101,7 @@ of the image:
 
 ```bash
 docker run --rm -v "$PWD":/src:ro python:3.13-slim sh -c '
-  mkdir /tmp/p && cp -r /src/pyproject.toml /src/README.md /src/src /tmp/p && python -m venv /tmp/v &&
+  mkdir /tmp/p && cp -r /src/pyproject.toml /src/README.md /src/app /tmp/p && python -m venv /tmp/v &&
   /tmp/v/bin/pip install -q --disable-pip-version-check --root-user-action=ignore setuptools &&
   /tmp/v/bin/pip install -q --disable-pip-version-check --root-user-action=ignore --no-build-isolation /tmp/p &&
   { grep "^#" /src/requirements.txt; /tmp/v/bin/pip freeze --all --exclude pip --exclude pixdrop; }' > requirements.new

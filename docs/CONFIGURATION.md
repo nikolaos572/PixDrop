@@ -96,7 +96,7 @@ With Docker Compose, they start with `docker compose exec pixdrop` instead of
 **`setup`** asks for the key (without showing it), asks OpenRouter whether it accepts the key,
 and reads OpenRouter's catalogue to check that it still offers every default model. Only
 then does it write `config.json`, with the default models of
-[`default_config.json`](../src/pixdrop/default_config.json), and it shows what each one
+[`default_config.json`](../app/default_config.json), and it shows what each one
 accepts. If anything is wrong (the key is refused or is a management key, which cannot
 generate images, a default model is gone, OpenRouter cannot be reached), it says so, exits
 with status 1, and writes nothing. A script can pipe the key:
@@ -123,7 +123,7 @@ they follow what the provider offers.
 
 `data/config.json` says which image models users can choose, and how to reach them. You can
 also edit it by hand, or write it yourself: `setup` is not needed then, and
-[`default_config.json`](../src/pixdrop/default_config.json) is a good start. For each model
+[`default_config.json`](../app/default_config.json) is a good start. For each model
 it names the provider, the provider's id of the model and the API to call; what the model
 accepts (its options, their values, how many reference images) PixDrop reads from the
 provider's model catalogue:
