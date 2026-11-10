@@ -100,6 +100,13 @@ def test_the_cookie_is_secure_over_https(app):
     assert "Secure" in response.headers["set-cookie"]
 
 
+def test_the_cookie_is_secure_with_an_https_public_base_url(make_app):
+    # Behind a proxy that FORWARDED_ALLOW_IPS does not trust, the request seems to come over HTTP.
+    app = make_app(public_base_url="https://pixdrop.example.com", forwarded_allow_ips="10.0.0.1")
+    response = TestClient(app).post("/api/session", json={"token": TOKENS["bob"]})
+    assert "Secure" in response.headers["set-cookie"]
+
+
 def test_a_wrong_token_is_refused(browser):
     response = browser.post("/api/session", json={"token": "not-a-valid-token-at-all"})
     assert (response.status_code, response.json()) == (401, {"detail": "invalid token"})

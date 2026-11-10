@@ -24,14 +24,15 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
   over HTTPS. Changes made with it require an `X-Requested-With` header, which other sites
   cannot send without the server's consent, and the server gives none (no CORS). The MCP
   server does not accept the cookie at all.
-- **Requests from other sites.** A `POST`, `PUT`, `PATCH` or `DELETE` whose `Origin` header
-  is not this server's is refused (`403`) before anything else happens, the token and the
-  body included: with `PUBLIC_BASE_URL`, the origin must be exactly its scheme, host and
-  port; without it, its host must be the one the request was sent to. That stops forged
-  requests from every other site, sibling subdomains such as `blog.example.com` included
-  (`SameSite` cookies take those for the same site), also to the MCP server and the transfer
-  links. Browsers always send `Origin` with these requests; requests without it (curl,
-  scripts, agents) cannot be forged by a web page, so they pass, and still need a token.
+- **Requests from other sites.** With `PUBLIC_BASE_URL` set, a `POST`, `PUT`, `PATCH` or
+  `DELETE` whose `Origin` header is not exactly its scheme, host and port is refused (`403`)
+  before anything else happens, the token and the body included. That stops forged requests
+  from every other site, sibling subdomains such as `blog.example.com` included (`SameSite`
+  cookies take those for the same site), also to the MCP server and the transfer links.
+  Browsers always send `Origin` with these requests; requests without it (curl, scripts,
+  agents) cannot be forged by a web page, so they pass, and still need a token. Without
+  `PUBLIC_BASE_URL`, the server cannot tell which address is its own behind a proxy, so it
+  does not check `Origin`; the cookie's protections above still apply.
 - **Pages** are served with a strict Content Security Policy (scripts, styles and images
   only from the server itself, no plugins, not shown in frames of other sites) and are never
   cached. Every response carries
@@ -96,14 +97,15 @@ protected, and how to [report a vulnerability](#reporting-a-vulnerability).
 - **Plain HTTP.** Without HTTPS, the tokens, the cookie, the transfer links, the prompts and
   the images can be read by anyone who can see the network's traffic. Put a reverse proxy
   with a certificate in front of the service when it is reachable beyond a trusted network.
-- **Client addresses from headers.** A proxy named in `FORWARDED_ALLOW_IPS` can put any
-  address it likes in `X-Forwarded-For`: in the job records, in the log, and for the transfer
-  links, which are bound to an address. So name only your proxy there (by default only
-  `127.0.0.1` is trusted). With `FORWARDED_ALLOW_IPS=*`, PixDrop takes the client's address
-  from the first address of `X-Forwarded-For`, else `CF-Connecting-IP`, else the connection,
-  and anyone who can reach PixDrop's port without the proxy can claim any address; so can
+- **Client addresses from headers.** By default (`FORWARDED_ALLOW_IPS=*`), PixDrop takes the
+  client's address from the first address of `X-Forwarded-For`, else `CF-Connecting-IP`, else
+  the connection, so that it works behind any proxy. Anyone who can reach PixDrop's port
+  without the proxy can then claim any address: in the job records, in the log, and for the
+  transfer links, which are bound to an address (they still need their secret); so can
   anyone behind a proxy that adds to the client's own `X-Forwarded-For` instead of replacing
-  it, Cloudflare among them. See [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
+  it, Cloudflare among them. Publish the port only to the proxy, or name the proxy in
+  `FORWARDED_ALLOW_IPS`; a proxy named there can still claim any address, so name only yours.
+  See [Reverse proxies](DEPLOYMENT.md#reverse-proxies).
 - **Spending.** Anyone with a token can generate images at the provider's expense, as many
   as they like. `MAX_ACTIVE_JOBS` limits how many generations a user runs at the same time,
   not how much they cost. Give tokens only to people you trust with your credits, set a
@@ -154,10 +156,10 @@ These are vulnerabilities:
 
 These are not:
 
-- Addresses claimed in `X-Forwarded-For` by a peer that `FORWARDED_ALLOW_IPS` trusts, and
-  with `FORWARDED_ALLOW_IPS=*`, addresses claimed in `CF-Connecting-IP` or `X-Forwarded-For`
-  when PixDrop's port can be reached without the proxy, or behind a proxy that keeps the
-  client's own `X-Forwarded-For`: see [What is not protected](#what-is-not-protected).
+- Addresses claimed in `X-Forwarded-For` or `CF-Connecting-IP` by a peer that
+  `FORWARDED_ALLOW_IPS` trusts: by default any, when PixDrop's port can be reached without
+  the proxy, or behind a proxy that keeps the client's own `X-Forwarded-For`. See
+  [What is not protected](#what-is-not-protected).
 - What a user can do with a valid token: generate images at the provider's expense, and
   fill the disk.
 - Tokens or transfer links read off a connection without HTTPS, or from URLs that carry

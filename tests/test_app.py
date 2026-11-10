@@ -128,7 +128,7 @@ def test_startup_logs_what_it_found(make_app, caplog):
     assert "3 model(s) configured, default gpt-image" in messages
     assert "URLs are given as https://pixdrop.example.com/..." in messages
     assert "MCP server at /mcp, transfer links valid for 60 minute(s)" in messages
-    assert "clients' addresses come from X-Forwarded-For in requests from 127.0.0.1 (FORWARDED_ALLOW_IPS)" in messages
+    assert "clients' addresses come from X-Forwarded-For in requests from any peer (FORWARDED_ALLOW_IPS)" in messages
 
 
 def test_startup_recovers_the_jobs_of_the_last_run(settings, upstream, caplog):

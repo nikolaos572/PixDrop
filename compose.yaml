@@ -13,12 +13,12 @@ services:
       - ./data:/data
     environment:
       TZ: UTC                          # time zone used to display dates, e.g. Europe/Athens
-      PUBLIC_BASE_URL: ""              # e.g. https://pixdrop.example.com: the base of the URLs handed out
+      PUBLIC_BASE_URL: ""              # recommended, e.g. https://pixdrop.example.com: the address users reach (docs/CONFIGURATION.md)
       GENERATION_TIMEOUT_SECONDS: "180"
       MAX_UPLOAD_MB: "20"              # largest reference image
       MAX_ACTIVE_JOBS: "4"             # per user, jobs waiting or generating at the same time
       ENABLE_MCP: "0"                  # 1 serves the MCP server for AI agents at /mcp (docs/MCP.md)
-      FORWARDED_ALLOW_IPS: ""          # your reverse proxy's address, e.g. 172.17.0.1, to log visitors' addresses (docs/DEPLOYMENT.md)
+      FORWARDED_ALLOW_IPS: ""          # empty: any peer may be the proxy; or name yours, e.g. 172.17.0.1 (docs/DEPLOYMENT.md)
     cap_drop:
       - ALL
     security_opt:

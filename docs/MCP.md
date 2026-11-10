@@ -294,11 +294,12 @@ or WebSockets. What matters is what matters for the rest of the service (see
 [DEPLOYMENT.md](DEPLOYMENT.md#reverse-proxies)):
 
 - **`PUBLIC_BASE_URL`** should be the address agents connect to, such as
-  `https://pixdrop.example.com`, so that the links' URLs start with it.
-- **The client's address** binds the links. **`FORWARDED_ALLOW_IPS` must name the proxy**,
-  as the container sees it (often `172.17.0.1`), so that PixDrop takes each client's address
-  from the proxy's `X-Forwarded-For`. Until then, every request seems to come from the proxy,
-  and links would work for any client of the proxy.
+  `https://pixdrop.example.com`, so that the links' URLs start with it whatever the proxy
+  sends.
+- **The client's address** binds the links: PixDrop takes it from the proxy's
+  `X-Forwarded-For`, from any peer by default (`FORWARDED_ALLOW_IPS=*`). Publish PixDrop's
+  port only to the proxy, or name the proxy in `FORWARDED_ALLOW_IPS`, so that no one who goes
+  around it can claim another address.
 - **Timeouts and sizes.** The tools answer within 50 seconds, below nginx's default limit
   of 60. Uploads through links carry the reference images: raise the proxy's limit on
   request bodies (`client_max_body_size` for nginx, 1 MB by default) to what agents upload.
@@ -318,9 +319,10 @@ an IPv6) address, or by connecting the agent to the same address `curl` uses.
 `?token=`) in the agent's configuration, and that the variable it reads (`PIXDROP_TOKEN`)
 is set where the agent starts.
 
-**Tool calls are refused with `403`** (*the request came from a page at ...*). The MCP
-client runs in a web page, such as a browser-based inspector, and its browser sends that
-page's address in an `Origin` header: PixDrop refuses changes from pages of other sites (see
+**Tool calls are refused with `403`** (*this server's address is ... (PUBLIC_BASE_URL), but
+the request came from a page at ...*). The MCP client runs in a web page, such as a
+browser-based inspector, and its browser sends that page's address in an `Origin` header:
+with `PUBLIC_BASE_URL` set, PixDrop refuses changes from pages at other addresses (see
 [Security](SECURITY.md)). Use a client that runs outside the browser, as agents do.
 
 ## Security

@@ -8,7 +8,6 @@ import logging
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, nullcontext
-from urllib.parse import urlsplit
 
 import httpx2
 from fastapi import FastAPI, Request, Response, status
@@ -151,7 +150,8 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
         # so requiring the header (and refusing chunked bodies, which do without it) bounds every
         # request. Uploads are authenticated first, so that no one receives a large body without a
         # token (links check theirs before reading, and /mcp authenticates first too). Before all
-        # that, changes that a browser sends from a page of another site are refused.
+        # that, changes that a browser sends from a page at another address than PUBLIC_BASE_URL
+        # are refused.
         length = request.headers.get("content-length", "")
         path = request.url.path
         response: Response | None = None
@@ -194,28 +194,25 @@ def create_app(settings: Settings | None = None, transport: httpx2.AsyncBaseTran
 
 
 def _foreign_origin(request: Request, public_base_url: str) -> str | None:
-    """Why the request is refused, if a browser sent it from a page that is not this server's.
+    """Why the request is refused, if a browser sent it from a page at another address than
+    PUBLIC_BASE_URL (only checked when it is set: without it, the server cannot tell which
+    address is its own behind a reverse proxy).
 
     Browsers send the page's origin in an Origin header with every POST, PUT, PATCH and DELETE.
-    It must be exactly PUBLIC_BASE_URL's scheme, host and port. Without PUBLIC_BASE_URL, its host
-    must be the one the request was sent to (the scheme and port the server sees may be a proxy's).
-    Another site is refused even when it is a sibling subdomain, which SameSite cookies take for
-    the same site. Requests without the header do not come from a browser (curl, agents), so no
-    other site can make them; they pass, and need a token."""
+    It must be exactly PUBLIC_BASE_URL's scheme, host and port, which also refuses sibling
+    subdomains (SameSite cookies take those for the same site). Requests without the header do
+    not come from a browser (curl, agents), so no other site can make them; they pass, and need
+    a token."""
     origin = request.headers.get("origin")
-    if request.method in _SAFE_METHODS or origin is None:
+    if not public_base_url or request.method in _SAFE_METHODS or origin is None:
         return None
-    if public_base_url:
-        expected = url_origin(public_base_url)
-        if url_origin(origin) == expected:
-            return None
-        return (
-            f"this server's address is {expected} (PUBLIC_BASE_URL), but the request came from a page at {origin}: "
-            f"open {expected}, or set PUBLIC_BASE_URL to the address you use"
-        )
-    if url_origin(origin) is not None and urlsplit(origin).hostname == request.url.hostname:
+    expected = url_origin(public_base_url)
+    if url_origin(origin) == expected:
         return None
-    return f"the request came from a page at {origin}, not from this server ({request.url.hostname})"
+    return (
+        f"this server's address is {expected} (PUBLIC_BASE_URL), but the request came from a page at {origin}: "
+        f"open {expected}, or set PUBLIC_BASE_URL to the address you use"
+    )
 
 
 async def _expire_pending(service: JobService) -> None:
