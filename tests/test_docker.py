@@ -592,10 +592,33 @@ def test_the_log_file_outlives_the_container_and_hides_tokens(image, data):
     assert "token=***" in log and TOKEN not in log
 
 
-def test_a_plain_docker_run_needs_no_options(image, data):
-    server = Server(image, data, hardened=False)
+SERVER_STATUS = """
+import pathlib
+for process in pathlib.Path("/proc").glob("[0-9]*"):
     try:
+        if (process / "cmdline").read_bytes() == b"python\\0-m\\0pixdrop\\0":
+            print((process / "status").read_text())
+    except OSError:
+        pass
+"""
+
+
+@pytest.mark.parametrize("init", [[], ["--init"]], ids=["own-init", "docker-init"])
+def test_a_plain_docker_run_needs_no_options(image, data, init):
+    # No --cap-drop, --security-opt or --init: the image itself provides what they would.
+    server = Server(image, data, *init, hardened=False)
+    try:
+        assert "CapEff:\t0000000000000000" in docker("exec", server.container, "python", "-c", SERVER_STATUS)
+        docker("exec", server.container, "sh", "-c", "sleep 1 & exit")  # leaves an orphan, reparented to process 1
+        time.sleep(2)
+        assert ") Z " not in docker("exec", server.container, "sh", "-c", "cat /proc/[0-9]*/stat")  # no zombie
         assert server.generate("a cat")["status"] == "completed"
+        start = time.monotonic()
+        docker("stop", server.container)
+        assert time.monotonic() - start < 8  # the server got docker stop's signal (not killed after 10 s)
+        logs = subprocess.run(["docker", "logs", server.container], capture_output=True, text=True, check=True)
+        assert "Application shutdown complete." in logs.stderr
+        assert "tini" not in logs.stdout + logs.stderr  # no warning from tini as process 2 under --init
     finally:
         server.stop()
 

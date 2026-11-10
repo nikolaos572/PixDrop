@@ -29,7 +29,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/health' % (os.environ.get('PORT', '').strip() or 8000), timeout=4)"]
 # An init process, so that no docker run option is needed for one: it passes docker stop's
-# signal on to the server, which then marks the generations it interrupts as failed.
-# -s keeps it working when Docker's own init runs first (--init).
+# signal on to the server, which then marks the generations it interrupts as failed, and
+# reaps processes orphaned in the container, which would stay as zombies under the server.
+# -s keeps it reaping when Docker's own init runs first (--init).
 ENTRYPOINT ["tini", "-s", "--"]
 CMD ["python", "-m", "pixdrop"]
