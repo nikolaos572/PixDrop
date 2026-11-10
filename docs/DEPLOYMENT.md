@@ -39,40 +39,56 @@ versions of PixDrop (see [Updating dependencies](DEVELOPMENT.md#updating-depende
 
 ## Running
 
-The container runs as uid and gid 61001, which must own the data directory (no user or group
-with that number needs to exist on the host):
-
 ```bash
-mkdir data
-sudo chown -R 61001:61001 data
-
-docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
+docker run -d --name pixdrop \
+  --restart unless-stopped \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -p 8000:8000 \
   -e TZ=Europe/Athens \
-  --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
+  -v pixdrop-data:/data \
   pixdrop
 
 docker exec -it pixdrop python -m pixdrop setup        # asks for your OpenRouter key, adds the default models
 docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](../compose.yaml), and the same two commands
-with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Until a user exists,
-the server refuses every request, and until `setup` has run it has no models.
-[CONFIGURATION.md](CONFIGURATION.md) has more on
+Until a user exists, the server refuses every request, and until `setup` has run it has no
+models. [CONFIGURATION.md](CONFIGURATION.md) has more on
 [the models](CONFIGURATION.md#providers-and-models), including how to add and remove them, and
-on [the users](CONFIGURATION.md#users). Everything the service stores
-is in the data directory, so the container can be removed and started again from a new
-image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
+on [the users](CONFIGURATION.md#users). Everything the service stores is in its data
+directory, the volume mounted at `/data`, so the container can be removed and started again
+from a new image (`docker rm -f pixdrop`, then the same `docker run`) without losing anything.
+Mount it at `/data` and nowhere else: a volume mounted at another path stays empty, and the
+data ends up in an anonymous volume that a new container does not reuse.
 
-Images before November 2026 ran as uid 1001: when you upgrade from one, give the data
-directory to 61001 once (the same `sudo chown -R 61001:61001 data`) before you start the new
-container. With rootless Docker or `userns-remap`, the host sees the container's ids shifted,
-so a `chown` on the host gives the wrong owner; give the directory to 61001 from inside a
-container instead:
+### A directory on the host
+
+The command above keeps the data in the named volume `pixdrop-data`, which Docker creates and
+gives to the container's user on first use (as root, `docker volume inspect -f
+'{{.Mountpoint}}' pixdrop-data` shows where it is). To keep the data in a directory of your
+choice instead, which the rest of these docs call `data/`, give it to the container's user
+first: uid and gid **61001**, a number that matches no account of the host (no user or group
+with that number needs to exist). Otherwise Docker creates the directory owned by root, and
+the server cannot write to it.
+
+```bash
+mkdir data
+sudo chown -R 61001:61001 data
+docker run ... -v "$PWD/data:/data" ... pixdrop
+```
+
+[`compose.yaml`](../compose.yaml) does this: `docker compose up -d`, then the same two
+commands with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Images
+before November 2026 ran as uid 1001: when you upgrade from one, give the data directory to
+61001 once, with the same `sudo chown -R`, before you start the new container. With rootless
+Docker or `userns-remap`, the host sees the container's ids shifted, so a `chown` on the host
+gives the wrong owner; give the directory to 61001 from inside a container instead:
 
 ```bash
 docker run --rm --user 0 -v "$PWD/data:/data" pixdrop chown -R 61001:61001 /data
 ```
+
+### Options
 
 `docker run` and compose are equivalent: `compose.yaml` only writes down the same options,
 and every setting is an environment variable, which `-e` sets as well. The image has its

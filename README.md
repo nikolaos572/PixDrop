@@ -1,173 +1,80 @@
 # PixDrop
 
-A small web service that generates images with AI models, for AI agents and for people:
-text to image, image to image, and text and image to image, such as game sprites and
-assets, icons, or the other sides of a character drawn from one side. It calls
-[OpenRouter](https://openrouter.ai) (or any API like it) with the administrator's key, and
-gives each user a token, a history and statistics. It is meant to be used by AI agents
-through its MCP server and by programs through its HTTP API, and also has a web page.
+Generate images with AI models, for AI agents and for people: text to image, image to
+image, and text and image to image, such as game sprites and assets, icons, or the other
+sides of a character drawn from one side. PixDrop calls [OpenRouter](https://openrouter.ai)
+(or any API like it) with the administrator's key, and gives each user a token, a history
+and statistics.
 
 ![The web page: the Generate form and the history of generated images](docs/screenshot.png)
 
-- **Any image model of OpenRouter.** The administrator names the models users may choose;
-  PixDrop reads from OpenRouter's model catalogue what each one accepts, with its own
-  values: aspect ratio, resolution or exact size, quality, transparent background, file
-  format (SVG for vector models), compression, several images at once, seed, and how many
-  reference images. Nothing to look up or keep up to date by hand.
+- **Any image model of OpenRouter**, with the options each one really accepts (aspect ratio,
+  resolution, quality, transparent background, SVG, seed, several images at once, ...), read
+  from OpenRouter's catalogue: nothing to look up or keep up to date by hand.
 - **Reference images**: up to 16 PNG, JPEG, WebP, GIF or SVG images with the prompt, to
   change an image or to draw new ones in its style.
-- **Full and medium size**: every image can be downloaded as generated, or scaled down to
-  512 pixels for a quick look.
-- **Usage and cost**: the tokens and the cost in US dollars of every job, as the provider
-  reports them, and per-user statistics by model and by month. The administrator sees all
-  users' with one command.
-- **Per-user tokens and storage**, a job list with each job's prompt, options, reference
-  images, images and cost. Several generations run at the same time; the web server stays
-  responsive meanwhile.
-- **Nothing is ever deleted** (see below).
-- **MCP server for AI agents** (optional): Claude Code, Codex, Antigravity and other
-  agents connect with a token, find PixDrop's tools, and generate images, upload reference
-  images and save the results by themselves.
+- **Full and medium size**: every image as generated, or scaled down to 512 pixels.
+- **Usage and cost** of every job, as the provider reports them, and statistics by model and
+  by month, per user and for all users.
+- **Per-user tokens and history**, several generations at the same time, and nothing is ever
+  deleted.
+- **A web page** to write a prompt, choose a model and its options, add reference images
+  (drop, choose or paste them) and follow the history: each job's images, cost and errors,
+  downloads, and its prompt or images to reuse; with statistics, the server's settings, and a
+  light or dark theme.
+- **An HTTP API** for programs, and an **MCP server** through which AI agents such as Claude
+  Code, Codex and Antigravity generate images, upload references and save the results by
+  themselves.
 
-## Running it
+Built with **Python 3.13, FastAPI and uvicorn**. No database: one JSON record per job, next
+to its images.
+
+## Run it
 
 ```bash
 docker build -t pixdrop .
 
-mkdir data
-sudo chown -R 61001:61001 data               # the container runs as uid 61001
-
-docker run -d --name pixdrop -p 8000:8000 -v "$PWD/data:/data" \
+docker run -d --name pixdrop \
+  --restart unless-stopped \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -p 8000:8000 \
   -e TZ=Europe/Athens \
-  --cap-drop ALL --security-opt no-new-privileges --restart unless-stopped \
+  -v pixdrop-data:/data \
   pixdrop
 
-docker exec -it pixdrop python -m pixdrop setup        # asks for your OpenRouter key, adds the default models
-docker exec pixdrop python -m pixdrop adduser alice    # prints alice's token
+docker exec -it pixdrop python -m pixdrop setup       # asks for your OpenRouter key, adds the default models
+docker exec pixdrop python -m pixdrop adduser alice   # prints alice's token
 ```
 
-or `docker compose up -d` with [`compose.yaml`](compose.yaml), and the same two commands
-with `docker compose exec pixdrop` instead of `docker exec -it pixdrop`. Then open
-`http://localhost:8000` and log in with the token.
+Then open `http://your-host:8000` and log in with the token. `--restart unless-stopped`
+starts PixDrop again after a crash or a reboot. Add users the same way, at any time;
+`python -m pixdrop reset-token alice` gives alice a new token if theirs is lost or leaked.
+To let AI agents use PixDrop, add `-e ENABLE_MCP=1` and connect them as
+[MCP.md](docs/MCP.md#connecting-an-agent) shows.
 
-`setup` checks your key and that OpenRouter still offers each default model, and only then
-writes `data/config.json`: if anything is wrong it writes nothing. To choose other models:
+> Mount the volume at **`/data`**: that is where PixDrop keeps the users, the models, the
+> images and the log. To keep them in a directory on the host instead, give it to
+> **UID/GID 61001**, the user PixDrop runs as, first: `sudo chown 61001:61001 /your/dir`.
+> See [Deployment](docs/DEPLOYMENT.md#a-directory-on-the-host).
 
-```bash
-docker exec -it pixdrop python -m pixdrop modify-models
-```
-
-shows a checklist of the models OpenRouter offers now, where space ticks a model and typing
-searches. Each model's options come from OpenRouter's catalogue and stay up to date by
-themselves. Running `setup` again replaces the key and all the models with the defaults: use
-it to change the key, or to start over.
-
-Add more users the same way, at any time, without a restart. If a token is lost or leaked,
-`docker exec pixdrop python -m pixdrop reset-token alice` prints a new one, and the old one
-stops working at once, in the browser and in the user's scripts and agents alike. (See
-[the users](docs/CONFIGURATION.md#users), also for removing a user.)
-
-The commands keep the users in `data/users.json`, which can also be edited by hand, in the
-same format as [TeXdrop](https://github.com/nikolaos572/TeXdrop)'s `users.json` (one file
-can serve both). `data/config.json` has the providers, with their keys, and the models: for
-each one only the provider, its id at OpenRouter and `"api_type": "images"`. It can be edited
-by hand too: to keep the key out of the file, write `"api_key_env": "OPENROUTER_API_KEY"`
-instead of `"api_key"`, and add `-e OPENROUTER_API_KEY=sk-or-v1-...` to the `docker run`
-command. To look at models, `docker exec pixdrop python -m pixdrop models` lists OpenRouter's
-image models, and `docker exec pixdrop python -m pixdrop models qwen` those matching `qwen`
-in detail (see [CONFIGURATION.md](docs/CONFIGURATION.md)).
-
-Everything the service stores lives in the mounted directory, so the container can be
-removed or upgraded without losing data. The service also runs without Docker.
-
-## Using it
-
-**Web page**: write a prompt, choose a model and the options it offers, and add reference
-images if you like (drop them on the page, choose them, or paste one); then press
-**Generate**. The history below shows each job as it runs and when it is done (point at the
-**?** of a failed job to see why it failed); open a job to see its images, download them in
-full or medium size, reuse its prompt, or use an image as a reference for the next one.
-**Statistics** shows your jobs, images and costs by model and by month, and **Server Info**
-the server's settings and limits, the models with their options, and the address for AI
-agents when the MCP server is on. The buttons next to them choose a light or dark theme,
-or follow the browser's (Auto).
-
-**API**: send the token as `Authorization: Bearer <token>`.
-
-```bash
-URL=http://localhost:8000; AUTH="Authorization: Bearer $PIXDROP_TOKEN"
-curl -H "$AUTH" -F "prompt=A pixel-art treasure chest, 32x32 sprite" -F background=transparent "$URL/api/jobs?wait=600"
-# {"id":"1793635964825_508b","status":"completed",...,"images":[{"index":1,...,"url":"http://localhost:8000/api/jobs/1793635964825_508b/images/1",...}],...}
-curl -H "$AUTH" -o chest.png $URL/api/jobs/1793635964825_508b/images/1
-
-# With reference images, and another model than the default
-curl -H "$AUTH" -F "prompt=The same knight seen from the back, same style and palette" \
-  -F model=nano-banana -F reference=@knight-front.png "$URL/api/jobs?wait=600"
-```
-
-`GET /api/models` lists the models and the options each accepts, with its values. The **[API documentation](docs/API.md)**
-describes every endpoint with its parameters, responses and errors, how jobs behave, and has
-complete examples for building a client.
-
-**AI agents (MCP)**: off by default; add `-e ENABLE_MCP=1` to the `docker run`
-command above and PixDrop serves an [MCP](https://modelcontextprotocol.io) server at
-`/mcp`. Configure an agent with the server's address and a user's token, and it finds the
-tools itself: it picks a model, generates, uploads reference images, follows the job, looks
-at the result in medium size, and saves the images where you ask. It needs to run shell
-commands (`curl`); images travel through short-lived links that work only from the agent's
-address. Connect it once:
-
-```bash
-export PIXDROP_TOKEN='<your token>'
-
-# Claude Code, for all projects
-claude mcp add --transport http --scope user pixdrop http://localhost:8000/mcp \
-  --header "Authorization: Bearer $PIXDROP_TOKEN"
-
-# Codex CLI (it reads PIXDROP_TOKEN when it starts)
-codex mcp add pixdrop --url http://localhost:8000/mcp --bearer-token-env-var PIXDROP_TOKEN
-
-# Antigravity (agy)
-agy mcp add --header "Authorization: Bearer $PIXDROP_TOKEN" pixdrop http://localhost:8000/mcp
-```
-
-Replace `localhost:8000` with the server's address when the agent runs elsewhere. A client
-that cannot send headers can use the address `http://localhost:8000/mcp?token=<your token>`
-instead.
-
-Then ask, for example:
-
-- *"Use PixDrop to generate a sprite sheet of a knight walking to the right: 4 frames in one
-  row, pixel art, transparent background. Save it as `assets/knight-walk.png`."*
-- *"Take `assets/knight-front.png` as a reference image and use PixDrop to generate the same
-  knight seen from the back, from the left and from the right, in the same style, palette
-  and size. Save them next to it as `knight-back.png`, `knight-left.png` and
-  `knight-right.png`."*
-
-**[MCP.md](docs/MCP.md)** has the tools, transfer links, reverse proxies and security.
-
-**Nothing is deleted.** PixDrop never deletes a job or an image: there is no delete button,
-endpoint or tool. Generated images, reference images and job records stay as the users'
-history. (Only waiting has a limit: a job waiting for its reference images fails if they do
-not arrive within `LINK_EXPIRY_MINUTES`, and agents' transfer links expire; the jobs stay.)
-The administrator can remove old jobs by hand on the server (see
-[Cleaning up](docs/DEPLOYMENT.md#cleaning-up)).
+> Behind an HTTPS reverse proxy, also set `PUBLIC_BASE_URL` (such as
+> `https://pixdrop.example.com`), the address users reach, and `FORWARDED_ALLOW_IPS`, your
+> proxy's address, so that the log shows each visitor's own: see
+> [Reverse proxies](docs/DEPLOYMENT.md#reverse-proxies).
 
 ## Documentation
 
-- [Deployment](docs/DEPLOYMENT.md): requirements, building, running with or without Docker,
-  the data directory and the job records, cleaning up, the statistics of all users, reverse
-  proxies, container limits, logs.
-- [Configuration](docs/CONFIGURATION.md): the users, the providers and models, the
-  options, the environment variables and their defaults, fixed limits.
-- [API documentation](docs/API.md): every endpoint, its parameters, responses and errors,
-  how jobs behave, and examples in the shell and Python.
-- [MCP server](docs/MCP.md): connecting AI agents (Claude Code, Codex, Antigravity), the
-  tools, transfer links, reverse proxies and security.
-- [Security](docs/SECURITY.md): the protections, what is not protected, and how to report a
+- [Deployment](docs/DEPLOYMENT.md): building, running with or without Docker, the data
+  directory, cleaning up, the statistics of all users, reverse proxies, container limits and
+  logs.
+- [Configuration](docs/CONFIGURATION.md): the users, the providers and models, every
+  environment variable, and the fixed limits.
+- [API](docs/API.md): every endpoint, how jobs behave, and examples in the shell and Python.
+- [MCP server](docs/MCP.md): connecting AI agents, the tools and the transfer links.
+- [Security](docs/SECURITY.md): what is protected and what is not, and how to report a
   vulnerability.
-- [Development](docs/DEVELOPMENT.md): how it works, running it with a fake provider, and the
-  tests.
+- [Development](docs/DEVELOPMENT.md): how it works, running it with a fake provider, the
+  tests, and updating the dependencies.
 
 ## License
 
