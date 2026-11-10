@@ -539,17 +539,11 @@ def test_without_public_base_url_urls_follow_the_request(app):
         ({}, "testclient"),
     ],
 )
-def test_with_any_peer_trusted_the_clients_address_comes_from_its_headers(make_app, data_dir, headers, client_ip):
-    with TestClient(make_app(forwarded_allow_ips="*"), headers=dict(ALICE)) as client:
-        job = submit(client, headers=ALICE | headers).json()
+def test_the_clients_address_is_recorded(client, data_dir, headers, client_ip):
+    # By default any peer may be the reverse proxy (FORWARDED_ALLOW_IPS=*).
+    job = submit(client, headers=ALICE | headers).json()
     assert job["client_ip"] == client_ip
     assert record_of(data_dir, "alice", job["id"])["client_ip"] == client_ip
-
-
-def test_by_default_the_clients_headers_are_ignored(client, data_dir):
-    # Only a proxy on this machine (127.0.0.1) is trusted, and uvicorn reads its headers.
-    job = submit(client, headers=ALICE | {"X-Forwarded-For": "203.0.113.7", "CF-Connecting-IP": "198.51.100.4"}).json()
-    assert job["client_ip"] == "testclient"
 
 
 def test_forwarded_headers_count_only_when_every_peer_may_be_a_proxy(make_app):

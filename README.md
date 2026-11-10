@@ -36,7 +36,6 @@ docker build -t pixdrop .
 
 docker run -d --name pixdrop \
   --restart unless-stopped \
-  --cap-drop ALL --security-opt no-new-privileges \
   -p 8000:8000 \
   -e TZ=Europe/Athens \
   -v pixdrop-data:/data \
@@ -47,7 +46,9 @@ docker exec pixdrop python -m pixdrop adduser alice   # prints alice's token
 ```
 
 Then open `http://your-host:8000` and log in with the token. `--restart unless-stopped`
-starts PixDrop again after a crash or a reboot. Add users the same way, at any time;
+starts PixDrop again after a crash or a reboot. Extra hardening (`--cap-drop ALL`,
+`--security-opt no-new-privileges`) and other options are in
+[Deployment](docs/DEPLOYMENT.md#options). Add users the same way, at any time;
 `python -m pixdrop reset-token alice` gives alice a new token if theirs is lost or leaked.
 To let AI agents use PixDrop, add `-e ENABLE_MCP=1` and connect them as
 [MCP.md](docs/MCP.md#connecting-an-agent) shows.
@@ -57,10 +58,9 @@ To let AI agents use PixDrop, add `-e ENABLE_MCP=1` and connect them as
 > **UID/GID 61001**, the user PixDrop runs as, first: `sudo chown 61001:61001 /your/dir`.
 > See [Deployment](docs/DEPLOYMENT.md#a-directory-on-the-host).
 
-> Behind an HTTPS reverse proxy, also set `PUBLIC_BASE_URL` (such as
-> `https://pixdrop.example.com`), the address users reach, and `FORWARDED_ALLOW_IPS`, your
-> proxy's address, so that the log shows each visitor's own: see
-> [Reverse proxies](docs/DEPLOYMENT.md#reverse-proxies).
+> It also works behind an HTTPS reverse proxy as it is. There, set `PUBLIC_BASE_URL` to the
+> address users reach (such as `https://pixdrop.example.com`), so that browsers may send
+> changes only from pages at that address: see [Reverse proxies](docs/DEPLOYMENT.md#reverse-proxies).
 
 ## Documentation
 

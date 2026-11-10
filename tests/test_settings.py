@@ -18,7 +18,7 @@ def test_defaults():
     assert settings.max_active_jobs == 4
     assert settings.medium_image_px == 512
     assert (settings.enable_mcp, settings.link_expiry_seconds) == (False, 3600)  # off by default, as in TeXdrop
-    assert settings.forwarded_allow_ips == "127.0.0.1"  # a proxy on this machine, so none in Docker
+    assert settings.forwarded_allow_ips == "*"  # any peer may be the reverse proxy, which works behind any
     assert (settings.host, settings.port) == ("0.0.0.0", 8000)
 
 
@@ -134,7 +134,7 @@ def test_invalid_values_are_refused(name, value, message):
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [("", "127.0.0.1"), ("*", "*"), (" 172.17.0.1 ", "172.17.0.1"), ("172.17.0.1, 172.18.0.0/16,::1", "172.17.0.1,172.18.0.0/16,::1")],
+    [("", "*"), ("*", "*"), (" 172.17.0.1 ", "172.17.0.1"), ("172.17.0.1, 172.18.0.0/16,::1", "172.17.0.1,172.18.0.0/16,::1")],
 )
 def test_the_trusted_proxies(value, expected):
     assert Settings.from_env({"FORWARDED_ALLOW_IPS": value}).forwarded_allow_ips == expected

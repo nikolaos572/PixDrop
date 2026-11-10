@@ -67,7 +67,7 @@ def login(body: Login, request: Request, response: Response) -> SessionOut:
         max_age=COOKIE_MAX_AGE,
         httponly=True,
         samesite="strict",
-        secure=request.url.scheme == "https",
+        secure=_secure(request),
     )
     return SessionOut(user=user)
 
@@ -83,4 +83,11 @@ def logout(request: Request, response: Response) -> None:
     also where it was copied, and delete the cookie (nothing else is deleted)."""
     if (session_id := request.cookies.get(COOKIE_NAME)) and (user := sessions(request).end(session_id)):
         request.state.user = user  # for the access log
-    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="strict", secure=request.url.scheme == "https")
+    response.delete_cookie(COOKIE_NAME, httponly=True, samesite="strict", secure=_secure(request))
+
+
+def _secure(request: Request) -> bool:
+    """Whether the cookie is for HTTPS only: when the request came over HTTPS, or PUBLIC_BASE_URL
+    says that users reach the server so (behind a proxy that FORWARDED_ALLOW_IPS does not trust,
+    the request seems to come over HTTP)."""
+    return request.url.scheme == "https" or request.app.state.settings.public_base_url.startswith("https://")
